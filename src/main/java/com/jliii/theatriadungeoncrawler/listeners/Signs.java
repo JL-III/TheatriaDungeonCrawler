@@ -43,18 +43,6 @@ public class Signs implements Listener {
                     }
                 }
             }
-//            else if (event.line(0) != null  && PlainTextComponentSerializer.plainText().serialize(event.line(0)).equals("[Koth-Door]")) {
-//                event.getPlayer().sendMessage("You just placed a door sign!");
-//                for (String key : dungeonMaster.getDungeonKeys()) {
-//                    if (event.line(1) != null && PlainTextComponentSerializer.plainText().serialize(event.line(1)).equals(key)) {
-//                        event.setLine(1, dungeonMaster.getDungeonByKey(key).getKey());
-//                        List<Location> doorSignLocations = (List<Location>) plugin.getConfig().get("arenas." + key + ".coords.doorsigns");
-//                        doorSignLocations.add(event.getBlock().getLocation());
-//                        plugin.getConfig().set("arenas." + key + ".coords.doorsigns", doorSignLocations);
-//                        plugin.saveConfig();
-//                    }
-//                }
-//            }
         }
     }
 
@@ -72,17 +60,6 @@ public class Signs implements Listener {
                         }
                     }
                 }
-//                else if (sign.line(0) != null  && PlainTextComponentSerializer.plainText().serialize(sign.line(0)).equals("[Koth-Door]")) {
-//                    for (String key : dungeonMaster.getDungeonKeys()) {
-//                        if (sign.line(1) != null && PlainTextComponentSerializer.plainText().serialize(sign.line(1)).equals(key)) {
-//                            List<Location> doorSignLocations = (List<Location>) plugin.getConfig().get("arenas." + key + ".coords.doorsigns");
-//                            doorSignLocations.remove(event.getBlock().getLocation());
-//                            plugin.getConfig().set("arenas." + key + ".coords.doorsigns", doorSignLocations);
-//                        }
-//                        plugin.saveConfig();
-//                    }
-//
-//                }
             }
         } else {
             event.setCancelled(true);

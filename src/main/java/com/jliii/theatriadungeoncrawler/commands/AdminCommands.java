@@ -1,6 +1,7 @@
 package com.jliii.theatriadungeoncrawler.commands;
 
 import com.jliii.theatriadungeoncrawler.enums.GameState;
+import com.jliii.theatriadungeoncrawler.enums.RoomObjectiveTypes;
 import com.jliii.theatriadungeoncrawler.managers.DungeonMaster;
 import com.jliii.theatriadungeoncrawler.objects.BossRoom;
 import com.jliii.theatriadungeoncrawler.objects.Dungeon;
@@ -17,8 +18,6 @@ import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 import org.jetbrains.annotations.NotNull;
-
-import java.util.ArrayList;
 import java.util.Set;
 import java.util.logging.Logger;
 
@@ -41,23 +40,34 @@ public class AdminCommands implements CommandExecutor {
         if (!player.hasPermission("theatria.dungeons.admin")) return true;
 
         if (args[0].equalsIgnoreCase("start") && player.hasPermission("theatria.dungeons.admin.start") && args.length == 2) {
-            if (dungeonMaster.getDungeonKeys().contains(args[1])) {
+            if (isDungeonKeyInvalid(args[1])) {
+                player.sendMessage("There is no dungeon with that name.");
+                return true;
+            } else {
                 if (dungeonMaster.getDungeonByKey(args[1]).getGameState().name().equalsIgnoreCase("off")) {
                     dungeonMaster.getDungeonByKey(args[1]).setGameState(GameState.ACTIVE);
                     dungeonMaster.updateSigns();
                     logger.info("Dungeon [" + args[1] + "] is starting.");
                     player.sendMessage("Dungeon " + args[1] + " is starting!");
+                    return true;
+                } else {
+                    player.sendMessage("The current state of the dungeon is " + dungeonMaster.getDungeonByKey(args[1]).getGameState().name());
                 }
             }
+
         }
 
         if (args[0].equalsIgnoreCase("stop") && player.hasPermission("theatria.dungeons.admin.start") && args.length == 2) {
-            if (dungeonMaster.getDungeonKeys().contains(args[1])) {
+            if (isDungeonKeyInvalid(args[1])) {
+                player.sendMessage("There is no dungeon with that name.");
+            } else {
                 if (dungeonMaster.getDungeonByKey(args[1]).getGameState().name().equalsIgnoreCase("active")) {
                     dungeonMaster.getDungeonByKey(args[1]).setGameState(GameState.OFF);
                     dungeonMaster.updateSigns();
                     logger.info("Dungeon [" + args[1] + "] is stopping.");
                     player.sendMessage("Dungeon " + args[1] + " is stopping!");
+                } else {
+                    player.sendMessage("The current state of the dungeon is " + dungeonMaster.getDungeonByKey(args[1]).getGameState().name());
                 }
             }
         }
@@ -86,29 +96,30 @@ public class AdminCommands implements CommandExecutor {
 
         if (args[0].equalsIgnoreCase("debug")) {
             player.sendMessage(ChatColor.GREEN + "----------Debug info----------");
-            player.sendMessage("Dungeons: ");
+            player.sendMessage(ChatColor.LIGHT_PURPLE + "Dungeons: ");
             for (Dungeon dungeon : dungeonMaster.getDungeons()) {
-                player.sendMessage("name: " + dungeon.getKey() + " #rooms: " + dungeon.getRooms().size());
+                player.sendMessage("name: " + dungeon.getKey() + " state: " + dungeon.getGameState() + " #rooms: " + dungeon.getRooms().size());
             }
-            player.sendMessage("Rooms info: ");
+            player.sendMessage(ChatColor.LIGHT_PURPLE + "Rooms info: ");
             for (Room room : dungeonMaster.getRooms()) {
-                String roomtype;
+                String roomInstanceType;
                 if (room instanceof BossRoom) {
-                    roomtype = "b";
+                    roomInstanceType = "b";
                 } else if (room instanceof MiniBossRoom){
-                    roomtype = "m-b";
+                    roomInstanceType = "m-b";
                 } else {
-                    roomtype = "room";
+                    roomInstanceType = "room";
                 }
                 player.sendMessage(ChatColor.YELLOW + "Dungeon: " + ChatColor.GREEN + room.getParentKey() + ChatColor.DARK_PURPLE
-                        + " || " + ChatColor.YELLOW + roomtype + " " + ChatColor.GREEN + room.getKey() + ChatColor.DARK_PURPLE
+                        + " || " + ChatColor.YELLOW + roomInstanceType + " " + ChatColor.GREEN + room.getKey() + ChatColor.DARK_PURPLE
                         + " || " + ChatColor.YELLOW + " complete: " + ChatColor.GREEN + room.isCompleted() + ChatColor.DARK_PURPLE
+                        + " || " + ChatColor.YELLOW + " type: " + ChatColor.GREEN + room.getType() + ChatColor.DARK_PURPLE
                         + " || " + ChatColor.YELLOW + " exit: " + ChatColor.GREEN + (room.getExitLocation() != null));
             }
         }
 
         if (args[0].equalsIgnoreCase("setregion") && args.length == 4) {
-            if (!dungeonMaster.getDungeonKeys().contains(args[1])) {
+            if (isDungeonKeyInvalid(args[1])) {
                 player.sendMessage("There is no dungeon with that name.");
                 return true;
             }
@@ -125,7 +136,7 @@ public class AdminCommands implements CommandExecutor {
         }
 
         if (args[0].equalsIgnoreCase("setexit") && args.length == 3) {
-            if (!dungeonMaster.getDungeonKeys().contains(args[1])) {
+            if (isDungeonKeyInvalid(args[1])) {
                 player.sendMessage("There is no dungeon with that name.");
                 return true;
             }
@@ -135,7 +146,7 @@ public class AdminCommands implements CommandExecutor {
         }
 
         if (args[0].equalsIgnoreCase("setentrance") && args.length == 3) {
-            if (!dungeonMaster.getDungeonKeys().contains(args[1])) {
+            if (isDungeonKeyInvalid(args[1])) {
                 player.sendMessage("There is no dungeon with that name.");
                 return true;
             }
@@ -145,7 +156,7 @@ public class AdminCommands implements CommandExecutor {
         }
 
         if (args[0].equalsIgnoreCase("setmob") && args.length == 3) {
-            if (!dungeonMaster.getDungeonKeys().contains(args[1])) {
+            if (isDungeonKeyInvalid(args[1])) {
                 player.sendMessage("There is no dungeon with that name.");
                 return true;
             }
@@ -154,8 +165,35 @@ public class AdminCommands implements CommandExecutor {
             player.sendMessage("Successfully set a mob spawn point.");
         }
 
+        if (args[0].equalsIgnoreCase("settype") && args.length == 4) {
+            if (isDungeonKeyInvalid(args[1])) {
+                player.sendMessage("There is no dungeon with that name.");
+                return true;
+            }
+            boolean foundValue = false;
+            for (RoomObjectiveTypes roomObjectiveTypes : RoomObjectiveTypes.values()) {
+                if (args[3].equalsIgnoreCase(roomObjectiveTypes.name())) {
+                    foundValue = true;
+                    break;
+                }
+            }
+            if (foundValue) {
+                plugin.getConfig().set("dungeons." + args[1] + ".rooms." + args[2] + ".type" , args[3]);
+                plugin.saveConfig();
+                player.sendMessage("Successfully set room type to " + args[3] + " for room " + args[2]);
+            } else {
+                player.sendMessage(ChatColor.RED + "That is not a valid room type.");
+                StringBuilder sb = new StringBuilder();
+                for (RoomObjectiveTypes roomObjectiveTypes : RoomObjectiveTypes.values()) {
+                    sb.append(roomObjectiveTypes.name().toLowerCase() + " ");
+                }
+                player.sendMessage(ChatColor.YELLOW + "List of possible room types: " + sb);
+            }
+            return true;
+        }
+
         if (args[0].equalsIgnoreCase("setspawn") && args.length == 2) {
-            if (!dungeonMaster.getDungeonKeys().contains(args[1])) {
+            if (isDungeonKeyInvalid(args[1])) {
                 player.sendMessage("There is no dungeon with that name.");
                 return true;
             }
@@ -179,5 +217,9 @@ public class AdminCommands implements CommandExecutor {
             }
         }
         return false;
+    }
+
+    private boolean isDungeonKeyInvalid(String key) {
+        return !dungeonMaster.getDungeonKeys().contains(key);
     }
 }

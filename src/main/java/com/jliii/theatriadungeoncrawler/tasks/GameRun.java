@@ -1,5 +1,6 @@
 package com.jliii.theatriadungeoncrawler.tasks;
 
+import com.jliii.theatriadungeoncrawler.enums.RoomObjectiveTypes;
 import com.jliii.theatriadungeoncrawler.managers.DungeonMaster;
 import com.jliii.theatriadungeoncrawler.objects.BossRoom;
 import com.jliii.theatriadungeoncrawler.objects.Dungeon;
@@ -25,6 +26,7 @@ public class GameRun {
 
     private final Dungeon dungeon;
     private Plugin plugin;
+    List<Entity> spawnedMobs = new ArrayList<>();
 
     public GameRun(Plugin plugin, Dungeon dungeon) {
         this.plugin = plugin;
@@ -39,27 +41,18 @@ public class GameRun {
                     cancel();
                     return;
                 }
-                for (Player player : Bukkit.getOnlinePlayers()) {
+                for (Player player : dungeon.getPlayersFromUUID(dungeon.getAllPlayersInGame())) {
                     for (Room room : dungeon.getRooms()) {
                         if (room.getRegion().contains(player.getLocation().getBlock().getLocation()) && !room.isHasBeenEntered() && !room.isCompleted()) {
                             player.sendMessage("You are in the room named: " + room.getKey());
                             room.setHasBeenEntered(true);
-                            List<Entity> spawnedMobs = new ArrayList<>();
-                            if (room instanceof BossRoom) {
-                                MythicMob mob = MythicBukkit.inst().getMobManager().getMythicMob("SkeletalKnight").orElse(null);
-                                if (mob != null) {
-                                    // spawns mob
-                                    ActiveMob knight = mob.spawn(BukkitAdapter.adapt(room.getSpawnLocations().get(0)),1);
-                                    // get mob as bukkit entity
-                                    spawnedMobs.add(knight.getEntity().getBukkitEntity());
-                                    room.setSpawnedMobs(spawnedMobs);
+                            switch (room.getType()) {
+                                case "mob_kill": {
+                                    runMobKillRoom(room, player);
                                 }
-                            } else {
-                                for (EntityType entityType : room.getMobs()) {
-                                    spawnedMobs.add(player.getWorld().spawnEntity(room.getSpawnLocations().get(GeneralUtils.getRandomNumber(0, room.getSpawnLocations().size() - 1)), entityType));
-                                }
-                                room.setSpawnedMobs(spawnedMobs);
+                                default : {}
                             }
+
                         } else if (room.isHasBeenEntered() && room.getSpawnedMobs().size() < 1 && !room.isCompleted()) {
                             player.sendMessage("All the mobs have been killed in this room!");
                             room.setCompleted(true);
@@ -70,6 +63,24 @@ public class GameRun {
                 }
             }
         }.runTaskTimer(plugin, 0, 20);
+    }
+
+    private void runMobKillRoom(Room room, Player player) {
+        if (room instanceof BossRoom) {
+            MythicMob mob = MythicBukkit.inst().getMobManager().getMythicMob("SkeletalKnight").orElse(null);
+            if (mob != null) {
+                // spawns mob
+                ActiveMob knight = mob.spawn(BukkitAdapter.adapt(room.getSpawnLocations().get(0)),1);
+                // get mob as bukkit entity
+                spawnedMobs.add(knight.getEntity().getBukkitEntity());
+                room.setSpawnedMobs(spawnedMobs);
+            }
+        } else {
+            for (EntityType entityType : room.getMobs()) {
+                spawnedMobs.add(player.getWorld().spawnEntity(room.getSpawnLocations().get(GeneralUtils.getRandomNumber(0, room.getSpawnLocations().size() - 1)), entityType));
+            }
+            room.setSpawnedMobs(spawnedMobs);
+        }
     }
 
 }

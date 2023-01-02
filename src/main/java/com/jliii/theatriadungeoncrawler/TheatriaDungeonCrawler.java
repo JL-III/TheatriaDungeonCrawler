@@ -16,7 +16,7 @@ public final class TheatriaDungeonCrawler extends JavaPlugin {
         DungeonMaster dungeonMaster = new DungeonMaster(this);
         Bukkit.getPluginManager().registerEvents(new PlayerListener(dungeonMaster), this);
         Bukkit.getPluginManager().registerEvents(new Signs(this, dungeonMaster), this);
-        Bukkit.getPluginCommand("dungeon").setExecutor(new AdminCommands(this, dungeonMaster));
+        Bukkit.getPluginCommand("dungeons").setExecutor(new AdminCommands(this, dungeonMaster));
 
     }
 

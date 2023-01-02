@@ -1,6 +1,5 @@
 package com.jliii.theatriadungeoncrawler.managers;
 
-import com.jliii.theatriadungeoncrawler.enums.LocationTypes;
 import com.jliii.theatriadungeoncrawler.objects.BossRoom;
 import com.jliii.theatriadungeoncrawler.objects.Dungeon;
 import com.jliii.theatriadungeoncrawler.objects.MiniBossRoom;
@@ -11,7 +10,6 @@ import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
 import org.bukkit.Location;
-import org.bukkit.World;
 import org.bukkit.block.Sign;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
@@ -26,7 +24,7 @@ public class DungeonMaster {
     private FileConfiguration fileConfiguration;
     private List<Dungeon> dungeons = new ArrayList<>();
     private List<Room> rooms = new ArrayList<>();
-    private final HashMap<UUID, String> playerGameMap = new HashMap<>();
+    private HashMap<UUID, String> playerGameMap = new HashMap<>();
     private List<String> dungeonKeys;
 
     public DungeonMaster(Plugin plugin) {
@@ -38,6 +36,8 @@ public class DungeonMaster {
     public void reload() {
         plugin.reloadConfig();
         rooms = new ArrayList<>();
+        dungeons = new ArrayList<>();
+        playerGameMap = new HashMap<>();
         updateSignLocations();
         this.fileConfiguration = plugin.getConfig();
         load();
