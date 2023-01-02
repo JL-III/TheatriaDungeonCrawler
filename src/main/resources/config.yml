@@ -1,0 +1,25 @@
+
+dungeons:
+  default:
+    world: ""
+    settings:
+      dungeon-type: ""
+      timer: 180
+    dungeon-coords:
+      spawn-locations: []
+      join-sign: []
+      door-signs: []
+      entrance: []
+      exit: []
+    rooms:
+      1:
+        region:
+          pos1:
+          pos2:
+        room-coords:
+          entrance: [ ]
+          exit: [ ]
+          mob-spawn: []
+        rewards:
+          - /
+          -
