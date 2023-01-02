@@ -1,6 +1,7 @@
 package com.jliii.theatriadungeoncrawler.listeners;
 
 import com.jliii.theatriadungeoncrawler.managers.DungeonMaster;
+import com.jliii.theatriadungeoncrawler.util.GeneralUtils;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -35,8 +36,7 @@ public class Signs implements Listener {
                         event.setLine(1, dungeonMaster.getDungeonByKey(key).getKey());
                         event.setLine(2, dungeonMaster.getDungeonByKey(key).getGameState().name());
                         event.setLine(3, "Players: " + dungeonMaster.getDungeonByKey(key).getAllPlayersInGame().size());
-//                        sign.update(true);
-                        plugin.getConfig().set("dungeons." + key + ".dungeon-coords.join-sign", event.getBlock().getLocation());
+                        GeneralUtils.setLocation(plugin.getConfig(), "dungeons." + key + ".dungeon-coords.join-sign-locations." + GeneralUtils.getLocationKey(event.getBlock().getLocation()), event.getBlock().getLocation());
                         plugin.saveConfig();
                     }
                 }
@@ -64,9 +64,9 @@ public class Signs implements Listener {
                 if (sign.line(0) != null && PlainTextComponentSerializer.plainText().serialize(sign.line(0)).equals("[Dungeons]")) {
                     for (String key : dungeonMaster.getDungeonKeys()) {
                         if (sign.line(1) != null && PlainTextComponentSerializer.plainText().serialize(sign.line(1)).equals(key)) {
-                            plugin.getConfig().set("dungeons." + key + ".dungeon-coords.join-sign", new ArrayList<>());
+                            //Todo will need a whole new implementation to find the key that belongs to the sign that is being destroyed
+                            plugin.getConfig().set("dungeons." + key + ".dungeon-coords.join-sign-locations." + GeneralUtils.getLocationKey(event.getBlock().getLocation()), null);
                             plugin.saveConfig();
-                            dungeonMaster.reload();
                         }
                     }
                 }

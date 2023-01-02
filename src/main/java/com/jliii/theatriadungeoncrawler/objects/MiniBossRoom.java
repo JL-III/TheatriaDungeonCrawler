@@ -7,8 +7,8 @@ import java.util.List;
 
 public class MiniBossRoom extends Room {
 
-    public MiniBossRoom(String key, List<Location> region, String parentKey, List<Location> spawnLocations, Location exitLocation, List<EntityType> mobs) {
-        super(key, region, parentKey, spawnLocations, exitLocation, mobs);
+    public MiniBossRoom(String key, String roomType,  List<Location> region, String parentKey, List<Location> spawnLocations, Location exitLocation, List<EntityType> mobs) {
+        super(key, roomType, region, parentKey, spawnLocations, exitLocation, mobs);
     }
 
 }

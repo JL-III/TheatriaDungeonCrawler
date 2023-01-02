@@ -56,7 +56,13 @@ public class AdminCommands implements CommandExecutor {
             }
         }
 
-        if (args[0].equalsIgnoreCase("reload") && player.hasPermission("theatria.dungeons.reload")) {
+        if (args[0].equalsIgnoreCase("leave") && player.hasPermission("theatria.dungeons.leave")) {
+            dungeonMaster.getPlayerGameMap().remove(player.getUniqueId());
+            player.teleport(dungeonMaster.getSignLocations().get(0));
+            dungeonMaster.updateSigns();
+        }
+
+        if (args[0].equalsIgnoreCase("reload") && player.hasPermission("theatria.dungeons.admin.reload")) {
             dungeonMaster.reload();
             player.sendMessage("Reloaded Dungeons");
         }
@@ -91,9 +97,7 @@ public class AdminCommands implements CommandExecutor {
                 player.sendMessage("/setregion [dungeon-name] [room-name] pos2");
             }
             GeneralUtils.setLocation(plugin.getConfig(), "dungeons." + args[1] + ".rooms." + args[2] + ".region." + args[3], player.getLocation());
-//            plugin.getConfig().set("dungeons." + args[1] + ".rooms." + args[2] + ".region." + args[3], player.getLocation());
             plugin.saveConfig();
-//            dungeonMaster.reload();
         }
 
         if (args[0].equalsIgnoreCase("setexit") && args.length == 3) {
@@ -103,7 +107,15 @@ public class AdminCommands implements CommandExecutor {
             }
             GeneralUtils.setLocation(plugin.getConfig(), "dungeons." + args[1] + ".rooms." + args[2] + ".room-coords.exit", player.getLocation());
             plugin.saveConfig();
-//            dungeonMaster.reload();
+        }
+
+        if (args[0].equalsIgnoreCase("setentrance") && args.length == 3) {
+            if (!dungeonMaster.getDungeonKeys().contains(args[1])) {
+                player.sendMessage("There is no dungeon with that name.");
+                return true;
+            }
+            GeneralUtils.setLocation(plugin.getConfig(), "dungeons." + args[1] + ".rooms." + args[2] + ".room-coords.entrance", player.getLocation());
+            plugin.saveConfig();
         }
 
         if (args[0].equalsIgnoreCase("setmob") && args.length == 3) {
@@ -113,49 +125,22 @@ public class AdminCommands implements CommandExecutor {
             }
             GeneralUtils.setLocation(plugin.getConfig(), "dungeons." + args[1] + ".rooms." + args[2] + ".room-coords.mob-spawn." + GeneralUtils.getLocationKey(player.getLocation()) , player.getLocation());
             plugin.saveConfig();
-//            dungeonMaster.reload();
         }
         if (args[0].equalsIgnoreCase("setmob") && args.length == 4) {
             if (args[3].equalsIgnoreCase("clear")) {
                 plugin.getConfig().set("dungeons." + args[1] + ".rooms." + args[2] + ".room-coords.mob-spawn", new ArrayList<>());
                 plugin.saveConfig();
-//                dungeonMaster.reload();
                 return true;
             }
         }
+
         if (args[0].equalsIgnoreCase("setspawn") && args.length == 2) {
             if (!dungeonMaster.getDungeonKeys().contains(args[1])) {
                 player.sendMessage("There is no dungeon with that name.");
                 return true;
             }
-            String path = "dungeons." + args[1] + ".dungeon-coords.spawn-locations";
-            List<Location> mobspawns = (List<Location>) plugin.getConfig().getList(path);
-            if (mobspawns == null) {
-                mobspawns = new ArrayList<>();
-            }
-            mobspawns.add(player.getLocation());
-            plugin.getConfig().set(path, mobspawns);
+            GeneralUtils.setLocation(plugin.getConfig(), "dungeons." + args[1] + ".dungeon-coords." + ".spawn-locations." + GeneralUtils.getLocationKey(player.getLocation()), player.getLocation());
             plugin.saveConfig();
-        }
-
-        if (args[0].equalsIgnoreCase("setspawn") && args.length == 3) {
-            if (args[2].equalsIgnoreCase("clear")) {
-                plugin.getConfig().set("dungeons." + args[1] + ".dungeon-coords.spawn-locations", new ArrayList<>());
-                plugin.saveConfig();
-//                dungeonMaster.reload();
-                return true;
-            }
-        }
-
-
-        if (args[0].equalsIgnoreCase("setentrance") && args.length == 3) {
-            if (!dungeonMaster.getDungeonKeys().contains(args[1])) {
-                player.sendMessage("There is no dungeon with that name.");
-                return true;
-            }
-            plugin.getConfig().set("dungeons." + args[1] + ".rooms." + args[2] + ".room-coords.entrance", player.getLocation());
-            plugin.saveConfig();
-//          dungeonMaster.reload();
         }
 
         if (args[0].equalsIgnoreCase("getconfig") && args.length == 2) {

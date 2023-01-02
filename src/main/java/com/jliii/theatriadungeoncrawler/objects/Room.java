@@ -11,6 +11,7 @@ public class Room {
 
     private final String key;
     private final String parentKey;
+    private final String type;
     private final List<Location> region;
     private boolean hasBeenEntered = false;
     private boolean isCompleted = false;
@@ -19,8 +20,9 @@ public class Room {
     private List<Entity> spawnedMobs;
     private final Location exitLocation;
 
-    public Room(String key, List<Location> region, String parentKey, List<Location> spawnLocations, Location exitLocation, List<EntityType> mobs) {
+    public Room(String key, String type, List<Location> region, String parentKey, List<Location> spawnLocations, Location exitLocation, List<EntityType> mobs) {
         this.key = key;
+        this.type = type;
         this.region = region;
         this.parentKey = parentKey;
         this.spawnLocations = spawnLocations;
@@ -81,5 +83,7 @@ public class Room {
     public Location getExitLocation() {
         return exitLocation;
     }
+
+    public String getType() { return type; }
 
 }

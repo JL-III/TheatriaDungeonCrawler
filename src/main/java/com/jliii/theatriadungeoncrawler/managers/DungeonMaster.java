@@ -15,6 +15,7 @@ import org.bukkit.World;
 import org.bukkit.block.Sign;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.FileConfiguration;
+import org.bukkit.entity.EntityType;
 import org.bukkit.plugin.Plugin;
 
 import java.util.*;
@@ -39,6 +40,7 @@ public class DungeonMaster {
     public void reload() {
         plugin.reloadConfig();
         rooms.clear();
+        updateSignLocations();
         this.fileConfiguration = plugin.getConfig();
         load();
     }
@@ -46,27 +48,28 @@ public class DungeonMaster {
     public void load() {
         this.dungeonKeys = getDungeonKeysFromConfig();
         for (String dungeonKey : dungeonKeys) {
-            signLocations = getSignLocations(dungeonKey);
             String worldKey = getWorldKeyFromConfig(dungeonKey);
+            signLocations = getDungeonCoordinateLocations(worldKey, dungeonKey, "join-sign-locations");
             try {
                 for (String roomKey : getDungeonRoomKeysFromConfig(dungeonKey)) {
                     try {
                         Location pos1 = GeneralUtils.parseLocation(plugin.getConfig(), "dungeons." + dungeonKey + ".rooms." + roomKey + ".region." + ".pos1", Bukkit.getWorld(worldKey));
-//                                (Location) fileConfiguration.get("dungeons." + dungeonKey + ".rooms." + roomKey + ".region." + ".pos1");
                         Location pos2 = GeneralUtils.parseLocation(plugin.getConfig(), "dungeons." + dungeonKey + ".rooms." + roomKey + ".region." + ".pos2", Bukkit.getWorld(worldKey));
-
+                        List<Location> regionLocations = ListGenerators.getRegionLocations(pos1, pos2);
+                        List<Location> mobSpawnLocations = getMobSpawnLocations(worldKey, dungeonKey, roomKey);
+                        Location exitLocation = getExitLocation(worldKey, dungeonKey, roomKey);
+                        List<EntityType> entityTypes = ListGenerators.getRandomEntityTypes();
+                        String roomType = getRoomType(dungeonKey, roomKey);
                         if (roomKey.equalsIgnoreCase("boss")) {
-                            Bukkit.getConsoleSender().sendMessage("size of list the list genereator is returning: " + ListGenerators.getRegionLocations(pos1, pos2).size());
-                            rooms.add(new BossRoom(roomKey, ListGenerators.getRegionLocations(pos1, pos2), dungeonKey, getMobSpawnLocations(worldKey, dungeonKey, roomKey), getExitLocation(worldKey, dungeonKey, roomKey), ListGenerators.getRandomEntityTypes()));
+                            rooms.add(new BossRoom(roomKey, roomType,  regionLocations, dungeonKey, mobSpawnLocations, exitLocation, entityTypes));
                         } else if (roomKey.equalsIgnoreCase("mini-boss")){
-                            rooms.add(new MiniBossRoom(roomKey, ListGenerators.getRegionLocations(pos1, pos2), dungeonKey, getMobSpawnLocations(worldKey, dungeonKey, roomKey), getExitLocation(worldKey, dungeonKey, roomKey), ListGenerators.getRandomEntityTypes()));
+                            rooms.add(new MiniBossRoom(roomKey, roomType,  regionLocations, dungeonKey, mobSpawnLocations, exitLocation, entityTypes));
                         } else {
-                            rooms.add(new Room(roomKey, ListGenerators.getRegionLocations(pos1, pos2), dungeonKey, getMobSpawnLocations(worldKey, dungeonKey, roomKey), getExitLocation(worldKey, dungeonKey, roomKey), ListGenerators.getRandomEntityTypes()));
+                            rooms.add(new Room(roomKey, roomType, regionLocations, dungeonKey, mobSpawnLocations, exitLocation, entityTypes));
                         }
                     } catch (Exception ex) {
                         Bukkit.getConsoleSender().sendMessage(ChatColor.YELLOW + "Room [" + roomKey + "] for dungeon [" + dungeonKey + "] does not have a region pos1 or pos2");
                     }
-
                 }
             } catch (Exception ex) {
                 Bukkit.getConsoleSender().sendMessage(ChatColor.YELLOW + "There is an dungeon without rooms, please check the config.");
@@ -75,9 +78,8 @@ public class DungeonMaster {
             for (Room room : rooms) {
                 Bukkit.getConsoleSender().sendMessage("Size of region in room : " + room.getRegion().size());
             }
-            dungeons.add(new Dungeon(plugin, worldKey, dungeonKey, rooms, getSpawnLocations(dungeonKey), playerGameMap));
+            dungeons.add(new Dungeon(plugin, worldKey, dungeonKey, rooms, signLocations, getDungeonCoordinateLocations(worldKey, dungeonKey, "spawn-locations"), playerGameMap));
         }
-//        updateSigns();
     }
 
     public List<String> getDungeonRoomKeysFromConfig(String dungeonKey) {
@@ -100,9 +102,6 @@ public class DungeonMaster {
         return tempList;
     }
 
-//    private List<Location> getRoomLocations(String key) {
-//
-//    }
 
     public Location getRoomRegionCornersFromConfig(String key, String room, String pos) throws RuntimeException {
         if (fileConfiguration.get("dungeons." + key + ".rooms." + room + ".region." + pos) != null) {
@@ -126,20 +125,30 @@ public class DungeonMaster {
         return locations;
     }
 
-    private List<Location> getEntranceLocations(String dungeonKey, String roomKey) {
-        return  (List<Location>) plugin.getConfig().getList("dungeons." + dungeonKey + ".rooms." + roomKey + ".room-coords.entrance");
+    public List<Location> getDungeonCoordinateLocations(String worldKey, String dungeonKey, String dungeonCoordinateType) {
+        ConfigurationSection results = (ConfigurationSection) fileConfiguration.get("dungeons." + dungeonKey + ".dungeon-coords." + dungeonCoordinateType);
+        List<String> tempList = new ArrayList<>();
+        if (results != null) {
+            Set<String> childrenKeys = results.getKeys(false);
+            tempList.addAll(childrenKeys);
+        }
+        List<Location> locations = new ArrayList<>();
+        for (String location : tempList) {
+            locations.add(GeneralUtils.parseLocation(plugin.getConfig(), "dungeons." + dungeonKey + ".dungeon-coords." + dungeonCoordinateType + "." + location, Bukkit.getWorld(worldKey)));
+        }
+        return locations;
     }
+
     private Location getExitLocation(String worldKey, String dungeonKey, String roomKey) {
         return  GeneralUtils.parseLocation(plugin.getConfig(), "dungeons." + dungeonKey + ".rooms." + roomKey + ".room-coords.exit", Bukkit.getWorld(worldKey));
     }
-    private List<Location> getMobSpawnLocations(String dungeonKey, String roomKey) {
-        return  (List<Location>) plugin.getConfig().getList("dungeons." + dungeonKey + ".rooms." + roomKey + ".room-coords.mob-spawn");
-    }
-    private List<Location> getSpawnLocations(String dungeonKey) {
-        return  (List<Location>) plugin.getConfig().getList("dungeons." + dungeonKey + ".dungeon-coords.spawn-locations");
-    }
+
     private List<Location> getSignLocations(String dungeonKey) {
         return  (List<Location>) plugin.getConfig().getList("dungeons." + dungeonKey + ".dungeon-coords.join-sign");
+    }
+
+    private String getRoomType(String dungeonKey, String roomKey) {
+        return plugin.getConfig().getString("dungeons." + dungeonKey + ".rooms." + roomKey + ".type");
     }
 
     public String getWorldKeyFromConfig(String dungeonKey) {
@@ -175,9 +184,11 @@ public class DungeonMaster {
         signLocations.clear();
         for (String key : dungeonKeys) {
             try {
-                signLocations.add((Location) fileConfiguration.get("dungeons." + key + ".dungeon-coords.join-sign"));
+
+                signLocations.addAll(getDungeonCoordinateLocations(getDungeonByKey(key).getWorldKey(), key, "join-sign-locations"));
+
             } catch (Exception ex) {
-                Bukkit.getConsoleSender().sendMessage(ChatColor.YELLOW + "There is an arena without a join sign, please check the config.");
+                Bukkit.getConsoleSender().sendMessage(ChatColor.YELLOW + "There is a dungeon without a join sign, please check the config.");
             }
         }
     }
