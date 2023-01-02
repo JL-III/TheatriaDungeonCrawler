@@ -24,11 +24,9 @@ public class DungeonMaster {
 
     private Plugin plugin;
     private FileConfiguration fileConfiguration;
-    private HashMap<LocationTypes, List<Location>> locationsMap;
     private List<Dungeon> dungeons = new ArrayList<>();
     private List<Room> rooms = new ArrayList<>();
     private final HashMap<UUID, String> playerGameMap = new HashMap<>();
-    private List<Location> signLocations;
     private List<String> dungeonKeys;
 
     public DungeonMaster(Plugin plugin) {
@@ -39,7 +37,7 @@ public class DungeonMaster {
 
     public void reload() {
         plugin.reloadConfig();
-        rooms.clear();
+        rooms = new ArrayList<>();
         updateSignLocations();
         this.fileConfiguration = plugin.getConfig();
         load();
@@ -49,7 +47,8 @@ public class DungeonMaster {
         this.dungeonKeys = getDungeonKeysFromConfig();
         for (String dungeonKey : dungeonKeys) {
             String worldKey = getWorldKeyFromConfig(dungeonKey);
-            signLocations = getDungeonCoordinateLocations(worldKey, dungeonKey, "join-sign-locations");
+            List<Location> signLocations = getDungeonCoordinateLocations(worldKey, dungeonKey, "join-sign-locations");
+            List<Location> spawnLocations = getDungeonCoordinateLocations(worldKey, dungeonKey, "spawn-locations");
             try {
                 for (String roomKey : getDungeonRoomKeysFromConfig(dungeonKey)) {
                     try {
@@ -68,18 +67,15 @@ public class DungeonMaster {
                             rooms.add(new Room(roomKey, roomType, regionLocations, dungeonKey, mobSpawnLocations, exitLocation, entityTypes));
                         }
                     } catch (Exception ex) {
-                        Bukkit.getConsoleSender().sendMessage(ChatColor.YELLOW + "Room [" + roomKey + "] for dungeon [" + dungeonKey + "] does not have a region pos1 or pos2");
+                        ex.printStackTrace();
                     }
                 }
             } catch (Exception ex) {
                 Bukkit.getConsoleSender().sendMessage(ChatColor.YELLOW + "There is an dungeon without rooms, please check the config.");
             }
-            Bukkit.getConsoleSender().sendMessage("size of rooms on load: " + rooms.size());
-            for (Room room : rooms) {
-                Bukkit.getConsoleSender().sendMessage("Size of region in room : " + room.getRegion().size());
-            }
-            dungeons.add(new Dungeon(plugin, worldKey, dungeonKey, rooms, signLocations, getDungeonCoordinateLocations(worldKey, dungeonKey, "spawn-locations"), playerGameMap));
+            dungeons.add(new Dungeon(plugin, worldKey, dungeonKey, rooms, signLocations, spawnLocations, playerGameMap));
         }
+        updateSigns();
     }
 
     public List<String> getDungeonRoomKeysFromConfig(String dungeonKey) {
@@ -100,15 +96,6 @@ public class DungeonMaster {
             tempList.addAll(childrenKeys);
         }
         return tempList;
-    }
-
-
-    public Location getRoomRegionCornersFromConfig(String key, String room, String pos) throws RuntimeException {
-        if (fileConfiguration.get("dungeons." + key + ".rooms." + room + ".region." + pos) != null) {
-            return ((Location) fileConfiguration.get("dungeons." + key + ".rooms." + room + ".region." + pos));
-        } else {
-            throw new RuntimeException("Arena is missing region points!");
-        }
     }
 
     public List<Location> getMobSpawnLocations(String worldKey, String dungeonKey, String roomKey) {
@@ -143,10 +130,6 @@ public class DungeonMaster {
         return  GeneralUtils.parseLocation(plugin.getConfig(), "dungeons." + dungeonKey + ".rooms." + roomKey + ".room-coords.exit", Bukkit.getWorld(worldKey));
     }
 
-    private List<Location> getSignLocations(String dungeonKey) {
-        return  (List<Location>) plugin.getConfig().getList("dungeons." + dungeonKey + ".dungeon-coords.join-sign");
-    }
-
     private String getRoomType(String dungeonKey, String roomKey) {
         return plugin.getConfig().getString("dungeons." + dungeonKey + ".rooms." + roomKey + ".type");
     }
@@ -173,42 +156,43 @@ public class DungeonMaster {
         return null;
     }
 
-    public List<Location> getSignLocations() { return this.signLocations; }
-
-
     public List<Dungeon> getDungeons() {
         return dungeons;
     }
 
     public void updateSignLocations() {
-        signLocations.clear();
-        for (String key : dungeonKeys) {
+        plugin.getLogger().info("Updating sign locations.");
+        for (Dungeon dungeon : getDungeons()) {
+            dungeon.setSignLocations(new ArrayList<>());
             try {
-
-                signLocations.addAll(getDungeonCoordinateLocations(getDungeonByKey(key).getWorldKey(), key, "join-sign-locations"));
-
+                List<Location> newLocations = new ArrayList<>(getDungeonCoordinateLocations(dungeon.getWorldKey(), dungeon.getKey(), "join-sign-locations"));
+                if (newLocations.isEmpty()) throw new RuntimeException("The locations list was empty when trying to update locations.");
+                dungeon.setSignLocations(newLocations);
             } catch (Exception ex) {
-                Bukkit.getConsoleSender().sendMessage(ChatColor.YELLOW + "There is a dungeon without a join sign, please check the config.");
+                plugin.getLogger().warning(ex.getMessage());
             }
         }
     }
 
     public void updateSigns() {
-        updateSignLocations();
-        for (Location location : signLocations) {
-            if (location != null) {
+        plugin.getLogger().info("Updating signs.");
+        for (Dungeon dungeon : getDungeons()) {
+            for (Location location : dungeon.getSignLocations()) {
+                if (location == null) continue;
                 Sign sign = (Sign) location.getBlock().getState();
-                if (PlainTextComponentSerializer.plainText().serialize(sign.line(0)).equals("[Dungeons]") && getDungeonKeysFromConfig().contains(PlainTextComponentSerializer.plainText().serialize(sign.line(1)))) {
-                    for (Dungeon dungeon : getDungeons()) {
-                        if (sign.getLine(1).equalsIgnoreCase(dungeon.getKey())) {
-                            sign.setLine(2, dungeon.getGameState().name());
-                            sign.setLine(3, "Players: " + dungeon.getAllPlayersInGame().size());
-                            sign.update(true);
-                        }
-                    }
-                }
+                if (!(PlainTextComponentSerializer.plainText().serialize(sign.line(0)).equals("[Dungeons]")
+                        && getDungeonKeysFromConfig().contains(PlainTextComponentSerializer.plainText().serialize(sign.line(1))))) continue;
+                if (!sign.getLine(1).equalsIgnoreCase(dungeon.getKey())) continue;
+                sign.setLine(2, dungeon.getGameState().name());
+                sign.setLine(3, "Players: " + dungeon.getAllPlayersInGame().size());
+                sign.update(true);
             }
         }
+    }
+
+    public void updateSignsAndLocations() {
+        updateSignLocations();
+        updateSigns();
     }
 
     public HashMap<UUID, String> getPlayerGameMap() {

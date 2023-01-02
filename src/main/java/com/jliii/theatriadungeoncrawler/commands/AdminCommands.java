@@ -3,6 +3,7 @@ package com.jliii.theatriadungeoncrawler.commands;
 import com.jliii.theatriadungeoncrawler.enums.GameState;
 import com.jliii.theatriadungeoncrawler.managers.DungeonMaster;
 import com.jliii.theatriadungeoncrawler.objects.BossRoom;
+import com.jliii.theatriadungeoncrawler.objects.Dungeon;
 import com.jliii.theatriadungeoncrawler.objects.MiniBossRoom;
 import com.jliii.theatriadungeoncrawler.objects.Room;
 import com.jliii.theatriadungeoncrawler.util.GeneralUtils;
@@ -13,22 +14,23 @@ import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 import org.bukkit.configuration.ConfigurationSection;
-import org.bukkit.configuration.MemorySection;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
-import java.util.List;
 import java.util.Set;
+import java.util.logging.Logger;
 
 public class AdminCommands implements CommandExecutor {
 
     private Plugin plugin;
+    private final Logger logger;
     private DungeonMaster dungeonMaster;
 
     public AdminCommands(Plugin plugin, DungeonMaster dungeonMaster){
         this.plugin = plugin;
+        this.logger = plugin.getLogger();
         this.dungeonMaster = dungeonMaster;
     }
 
@@ -43,6 +45,8 @@ public class AdminCommands implements CommandExecutor {
                 if (dungeonMaster.getDungeonByKey(args[1]).getGameState().name().equalsIgnoreCase("off")) {
                     dungeonMaster.getDungeonByKey(args[1]).setGameState(GameState.ACTIVE);
                     dungeonMaster.updateSigns();
+                    logger.info("Dungeon [" + args[1] + "] is starting.");
+                    player.sendMessage("Dungeon " + args[1] + " is starting!");
                 }
             }
         }
@@ -52,13 +56,26 @@ public class AdminCommands implements CommandExecutor {
                 if (dungeonMaster.getDungeonByKey(args[1]).getGameState().name().equalsIgnoreCase("active")) {
                     dungeonMaster.getDungeonByKey(args[1]).setGameState(GameState.OFF);
                     dungeonMaster.updateSigns();
+                    logger.info("Dungeon [" + args[1] + "] is stopping.");
+                    player.sendMessage("Dungeon " + args[1] + " is stopping!");
                 }
             }
         }
 
         if (args[0].equalsIgnoreCase("leave") && player.hasPermission("theatria.dungeons.leave")) {
+            String dungeonKey = dungeonMaster.getPlayerGameMap().get(player.getUniqueId());
+            if (dungeonKey == null) {
+                player.sendMessage("You are not in a dungeon.");
+                return true;
+            }
             dungeonMaster.getPlayerGameMap().remove(player.getUniqueId());
-            player.teleport(dungeonMaster.getSignLocations().get(0));
+            player.sendMessage("You have left the dungeon.");
+            if (dungeonMaster.getDungeonByKey(dungeonKey).getSignLocations().size() > 0) {
+                player.teleport(dungeonMaster.getDungeonByKey(dungeonKey).getSignLocations().get(0));
+            } else {
+                player.teleport(new Location(Bukkit.getWorld("world"), 61, 72, -2));
+                logger.warning("There was no sign location to teleport the player back to. Please fix this by adding a join-sign-location to the config.");
+            }
             dungeonMaster.updateSigns();
         }
 
@@ -67,8 +84,13 @@ public class AdminCommands implements CommandExecutor {
             player.sendMessage("Reloaded Dungeons");
         }
 
-        if (args[0].equalsIgnoreCase("getrooms")) {
-            player.sendMessage(ChatColor.GREEN + "Rooms that currently exist.");
+        if (args[0].equalsIgnoreCase("debug")) {
+            player.sendMessage(ChatColor.GREEN + "----------Debug info----------");
+            player.sendMessage("Dungeons: ");
+            for (Dungeon dungeon : dungeonMaster.getDungeons()) {
+                player.sendMessage("name: " + dungeon.getKey() + " #rooms: " + dungeon.getRooms().size());
+            }
+            player.sendMessage("Rooms info: ");
             for (Room room : dungeonMaster.getRooms()) {
                 String roomtype;
                 if (room instanceof BossRoom) {
@@ -98,6 +120,8 @@ public class AdminCommands implements CommandExecutor {
             }
             GeneralUtils.setLocation(plugin.getConfig(), "dungeons." + args[1] + ".rooms." + args[2] + ".region." + args[3], player.getLocation());
             plugin.saveConfig();
+            player.sendMessage("Successfully set " + args[3] + " for " + args[2] + " in " + args[1]);
+
         }
 
         if (args[0].equalsIgnoreCase("setexit") && args.length == 3) {
@@ -107,6 +131,7 @@ public class AdminCommands implements CommandExecutor {
             }
             GeneralUtils.setLocation(plugin.getConfig(), "dungeons." + args[1] + ".rooms." + args[2] + ".room-coords.exit", player.getLocation());
             plugin.saveConfig();
+            player.sendMessage("Successfully set an exit.");
         }
 
         if (args[0].equalsIgnoreCase("setentrance") && args.length == 3) {
@@ -116,6 +141,7 @@ public class AdminCommands implements CommandExecutor {
             }
             GeneralUtils.setLocation(plugin.getConfig(), "dungeons." + args[1] + ".rooms." + args[2] + ".room-coords.entrance", player.getLocation());
             plugin.saveConfig();
+            player.sendMessage("Successfully set an entrance.");
         }
 
         if (args[0].equalsIgnoreCase("setmob") && args.length == 3) {
@@ -125,13 +151,7 @@ public class AdminCommands implements CommandExecutor {
             }
             GeneralUtils.setLocation(plugin.getConfig(), "dungeons." + args[1] + ".rooms." + args[2] + ".room-coords.mob-spawn." + GeneralUtils.getLocationKey(player.getLocation()) , player.getLocation());
             plugin.saveConfig();
-        }
-        if (args[0].equalsIgnoreCase("setmob") && args.length == 4) {
-            if (args[3].equalsIgnoreCase("clear")) {
-                plugin.getConfig().set("dungeons." + args[1] + ".rooms." + args[2] + ".room-coords.mob-spawn", new ArrayList<>());
-                plugin.saveConfig();
-                return true;
-            }
+            player.sendMessage("Successfully set a mob spawn point.");
         }
 
         if (args[0].equalsIgnoreCase("setspawn") && args.length == 2) {
@@ -141,6 +161,7 @@ public class AdminCommands implements CommandExecutor {
             }
             GeneralUtils.setLocation(plugin.getConfig(), "dungeons." + args[1] + ".dungeon-coords." + ".spawn-locations." + GeneralUtils.getLocationKey(player.getLocation()), player.getLocation());
             plugin.saveConfig();
+            player.sendMessage("Successfully set a spawn point.");
         }
 
         if (args[0].equalsIgnoreCase("getconfig") && args.length == 2) {

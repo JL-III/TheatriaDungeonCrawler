@@ -1,6 +1,7 @@
 package com.jliii.theatriadungeoncrawler.listeners;
 
 import com.jliii.theatriadungeoncrawler.managers.DungeonMaster;
+import com.jliii.theatriadungeoncrawler.objects.Dungeon;
 import com.jliii.theatriadungeoncrawler.util.GeneralUtils;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.Location;
@@ -38,6 +39,7 @@ public class Signs implements Listener {
                         event.setLine(3, "Players: " + dungeonMaster.getDungeonByKey(key).getAllPlayersInGame().size());
                         GeneralUtils.setLocation(plugin.getConfig(), "dungeons." + key + ".dungeon-coords.join-sign-locations." + GeneralUtils.getLocationKey(event.getBlock().getLocation()), event.getBlock().getLocation());
                         plugin.saveConfig();
+                        dungeonMaster.updateSignsAndLocations();
                     }
                 }
             }
@@ -64,9 +66,9 @@ public class Signs implements Listener {
                 if (sign.line(0) != null && PlainTextComponentSerializer.plainText().serialize(sign.line(0)).equals("[Dungeons]")) {
                     for (String key : dungeonMaster.getDungeonKeys()) {
                         if (sign.line(1) != null && PlainTextComponentSerializer.plainText().serialize(sign.line(1)).equals(key)) {
-                            //Todo will need a whole new implementation to find the key that belongs to the sign that is being destroyed
                             plugin.getConfig().set("dungeons." + key + ".dungeon-coords.join-sign-locations." + GeneralUtils.getLocationKey(event.getBlock().getLocation()), null);
                             plugin.saveConfig();
+                            dungeonMaster.updateSignsAndLocations();
                         }
                     }
                 }
@@ -94,15 +96,14 @@ public class Signs implements Listener {
         if (event.getClickedBlock() != null && event.getClickedBlock().getType() == Material.OAK_WALL_SIGN) {
             Sign sign = (Sign) event.getClickedBlock().getState();
             if (PlainTextComponentSerializer.plainText().serialize(sign.line(0)).equals("[Dungeons]") && dungeonMaster.getDungeonKeys().contains(PlainTextComponentSerializer.plainText().serialize(sign.line(1)))) {
-                dungeonMaster.getDungeonByKey(PlainTextComponentSerializer.plainText().serialize(sign.line(1))).addToPlayersInGame(player);
-                sign.setLine(3, "Players: " + dungeonMaster.getDungeonByKey(PlainTextComponentSerializer.plainText().serialize(sign.line(1))).getAllPlayersInGame().size());
+                String dungeonKey = PlainTextComponentSerializer.plainText().serialize(sign.line(1));
+                Dungeon dungeon = dungeonMaster.getDungeonByKey(dungeonKey);
+                dungeon.addToPlayersInGame(player);
+                sign.setLine(3, "Players: " + dungeon.getAllPlayersInGame().size());
                 sign.update(true);
-                if (dungeonMaster.getDungeonByKey(PlainTextComponentSerializer.plainText().serialize(sign.line(1))).getGameState().name().equalsIgnoreCase("active")) {
-//                    dungeonMaster.getDungeonByKey(PlainTextComponentSerializer.plainText().serialize(sign.line(1))).getGameState().getGameTimerBossBar().addPlayer(player);
-//                    player.setScoreboard(dungeonMaster.getDungeonByKey(PlainTextComponentSerializer.plainText().serialize(sign.line(1))).getGame().getScoreboard());
+                if (dungeon.getGameState().name().equalsIgnoreCase("active")) {
                     player.getInventory().clear();
-//                    PlayerKit.GivePlayerKit(player);
-                    player.teleport(dungeonMaster.getDungeonByKey(PlainTextComponentSerializer.plainText().serialize(sign.line(1))).getSpawnLocations().get(0));
+                    player.teleport(dungeon.getSpawnLocations().get(0));
                 }
                 dungeonMaster.updateSigns();
             }

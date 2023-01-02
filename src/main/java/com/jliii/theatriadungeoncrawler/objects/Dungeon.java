@@ -23,15 +23,10 @@ public class Dungeon {
     GameRun game;
     private HashMap<UUID,String> playerGameMap;
     private final List<Location> spawnLocations;
-
-    public GameRun getGame() {
-        return game;
-    }
-
-    private final List<Location> signLocations;
+    private List<Location> signLocations;
 
 
-    public Dungeon(Plugin plugin, String worldKey, String key, List<Room> rooms,List<Location> signLocations, List<Location> spawnLocations, HashMap<UUID, String> playerGameMap) {
+    public Dungeon(Plugin plugin, String worldKey, String key, List<Room> rooms, List<Location> signLocations, List<Location> spawnLocations, HashMap<UUID, String> playerGameMap) {
         this.rooms = rooms;
         this.worldKey = worldKey;
         this.signLocations = signLocations;
@@ -135,8 +130,16 @@ public class Dungeon {
         return signLocations;
     }
 
+    public void setSignLocations(List<Location> signLocations) {
+        this.signLocations = signLocations;
+    }
+
     public String getWorldKey() {
         return worldKey;
+    }
+
+    public GameRun getGame() {
+        return game;
     }
 
 }
