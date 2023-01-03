@@ -4,6 +4,7 @@ import com.jliii.theatriadungeoncrawler.managers.DungeonMaster;
 import com.jliii.theatriadungeoncrawler.objects.Dungeon;
 import com.jliii.theatriadungeoncrawler.util.GeneralUtils;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
+import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.block.Sign;
@@ -48,7 +49,7 @@ public class Signs implements Listener {
 
     @EventHandler
     public void onSignDestroy(BlockBreakEvent event) {
-        if (event.getPlayer().hasPermission("theatria.dungeons.admin.sign.destroy")) {
+        if (event.getPlayer().hasPermission("theatria.dungeons.admin.sign.destroy") && event.getPlayer().getGameMode().equals(GameMode.SURVIVAL)) {
             if (event.getBlock().getType() == Material.OAK_WALL_SIGN) {
                 Sign sign = (Sign) event.getBlock().getState();
                 if (sign.line(0) != null && PlainTextComponentSerializer.plainText().serialize(sign.line(0)).equals("[Dungeons]")) {

@@ -16,6 +16,7 @@ public class Room {
     private boolean hasBeenEntered = false;
     private boolean isCompleted = false;
     private boolean hasRunCompletedSequence = false;
+    private boolean blockReached = false;
     private final List<EntityType> mobs;
     private final List<Location> spawnLocations;
     private List<Entity> spawnedMobs;
@@ -95,4 +96,11 @@ public class Room {
         this.hasRunCompletedSequence = hasRunCompletedSequence;
     }
 
+    public void setBlockReached(Boolean set) {
+        this.blockReached = set;
+    }
+
+    public boolean getBlockReached() {
+        return blockReached;
+    }
 }

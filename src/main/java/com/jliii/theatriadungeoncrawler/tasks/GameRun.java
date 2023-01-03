@@ -50,6 +50,9 @@ public class GameRun {
                                 case "mob_kill": {
                                     runMobKillRoom(room, player);
                                 }
+                                case "parkour": {
+                                    parkourRunnable(player, room);
+                                }
                                 default : {}
                             }
 
@@ -64,6 +67,41 @@ public class GameRun {
                 }
             }
         }.runTaskTimer(plugin, 0, 20);
+    }
+
+    private void checkIfObjectiveIsCompleted(Room room) {
+
+        switch (room.getType()) {
+            case "mob_kill": {
+                //Condition to check when determining if the rooms objective has been completed
+                if (room.getSpawnedMobs().size() < 1) {
+                    room.setCompleted(true);
+                }
+            }
+            case "parkour": {
+                if (room.getBlockReached()) {
+                    room.setCompleted(true);
+                }
+            }
+            default: {
+
+            }
+        }
+
+    }
+
+    public void parkourRunnable(Player player, Room room) {
+        new BukkitRunnable(){
+
+            @Override
+            public void run(){
+                if (player.getLocation().add(0, -1, 0).getBlock().getType() == Material.GOLD_BLOCK) {
+                    room.setBlockReached(true);
+                    cancel();
+                }
+            }
+
+        }.runTaskTimer(plugin, 0, 10);
     }
 
     private void runMobKillRoom(Room room, Player player) {
@@ -85,19 +123,6 @@ public class GameRun {
         }
     }
 
-    private void checkIfObjectiveIsCompleted(Room room) {
 
-        switch (room.getType()) {
-            case "mob_kill": {
-                if (room.getSpawnedMobs().size() < 1) {
-                    room.setCompleted(true);
-                }
-            }
-            default: {
-
-            }
-        }
-
-    }
 
 }
