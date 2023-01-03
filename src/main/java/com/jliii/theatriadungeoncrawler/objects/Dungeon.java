@@ -45,6 +45,7 @@ public class Dungeon {
         this.gameState = gameState;
         switch (gameState) {
             case OFF:
+                //give access to dungeon master to update signs on state changes.
                 reset();
                 break;
             case LOBBY:

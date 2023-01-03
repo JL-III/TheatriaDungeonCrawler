@@ -17,6 +17,7 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
+import org.bukkit.scheduler.BukkitTask;
 import org.jetbrains.annotations.NotNull;
 import java.util.Set;
 import java.util.logging.Logger;
@@ -216,7 +217,18 @@ public class AdminCommands implements CommandExecutor {
                 player.sendMessage("Could not find that object.");
             }
         }
-        return false;
+
+        if (args[0].equalsIgnoreCase("tasks")) {
+            player.sendMessage(ChatColor.LIGHT_PURPLE + "----------tasks----------");
+            for (BukkitTask task : Bukkit.getScheduler().getPendingTasks()) {
+                if (task.getOwner().getName().equalsIgnoreCase("theatriadungeoncrawler")) {
+                    player.sendMessage(task.getOwner().getName() + task.getTaskId());
+                }
+            }
+            player.sendMessage(ChatColor.LIGHT_PURPLE + "----------tasks----------");
+            return true;
+        }
+        return true;
     }
 
     private boolean isDungeonKeyInvalid(String key) {

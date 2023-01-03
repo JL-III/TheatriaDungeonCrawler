@@ -27,6 +27,7 @@ public class GameRun {
 
     private final Dungeon dungeon;
     private Plugin plugin;
+    private List<Integer> runnables = new ArrayList<>();
     public GameRun(Plugin plugin, Dungeon dungeon) {
         this.plugin = plugin;
         this.dungeon = dungeon;
@@ -36,8 +37,13 @@ public class GameRun {
         new BukkitRunnable() {
             @Override
             public void run() {
-                if (!dungeon.getGameState().name().equalsIgnoreCase("ACTIVE") || dungeon.getAllPlayersInGame().isEmpty()) {
+                if (dungeon.getGameState().name().equalsIgnoreCase("OFF") || dungeon.getAllPlayersInGame().isEmpty()) {
                     cancel();
+                    for (Integer id : runnables) {
+                        Bukkit.getScheduler().cancelTask(id);
+                        plugin.getLogger().info("Runnable with id " + id + " was stopped.");
+                    }
+                    runnables = new ArrayList<>();
                     dungeon.setGameState(GameState.OFF);
                     return;
                 }
@@ -55,7 +61,6 @@ public class GameRun {
                                 }
                                 default : {}
                             }
-
                         } else if (room.isHasBeenEntered() && !room.isCompleted()){
                             checkIfObjectiveIsCompleted(room);
                         } else if (room.isHasBeenEntered() && room.isCompleted() && !room.hasRunCompletedSequence()) {
@@ -91,8 +96,7 @@ public class GameRun {
     }
 
     public void parkourRunnable(Player player, Room room) {
-        new BukkitRunnable(){
-
+         runnables.add(new BukkitRunnable(){
             @Override
             public void run(){
                 if (player.getLocation().add(0, -1, 0).getBlock().getType() == Material.GOLD_BLOCK) {
@@ -101,7 +105,7 @@ public class GameRun {
                 }
             }
 
-        }.runTaskTimer(plugin, 0, 10);
+        }.runTaskTimer(plugin, 0, 10).getTaskId());
     }
 
     private void runMobKillRoom(Room room, Player player) {
