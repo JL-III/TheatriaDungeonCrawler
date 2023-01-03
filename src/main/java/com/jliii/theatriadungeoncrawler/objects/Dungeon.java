@@ -16,6 +16,7 @@ public class Dungeon {
 
     private String key;
     private String worldKey;
+    private boolean isComplete;
     List<Room> rooms;
     List<MiniBossRoom> miniBossRooms;
     List<BossRoom> bossRooms;
@@ -140,6 +141,14 @@ public class Dungeon {
 
     public GameRun getGame() {
         return game;
+    }
+
+    public boolean isComplete() {
+        return isComplete;
+    }
+
+    public void setComplete(boolean complete) {
+        isComplete = complete;
     }
 
 }

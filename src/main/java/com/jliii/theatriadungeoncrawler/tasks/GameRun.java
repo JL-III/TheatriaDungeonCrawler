@@ -1,5 +1,6 @@
 package com.jliii.theatriadungeoncrawler.tasks;
 
+import com.jliii.theatriadungeoncrawler.enums.GameState;
 import com.jliii.theatriadungeoncrawler.enums.RoomObjectiveTypes;
 import com.jliii.theatriadungeoncrawler.managers.DungeonMaster;
 import com.jliii.theatriadungeoncrawler.objects.BossRoom;
@@ -26,8 +27,6 @@ public class GameRun {
 
     private final Dungeon dungeon;
     private Plugin plugin;
-    List<Entity> spawnedMobs = new ArrayList<>();
-
     public GameRun(Plugin plugin, Dungeon dungeon) {
         this.plugin = plugin;
         this.dungeon = dungeon;
@@ -37,8 +36,9 @@ public class GameRun {
         new BukkitRunnable() {
             @Override
             public void run() {
-                if (!dungeon.getGameState().name().equalsIgnoreCase("ACTIVE")) {
+                if (!dungeon.getGameState().name().equalsIgnoreCase("ACTIVE") || dungeon.getAllPlayersInGame().isEmpty()) {
                     cancel();
+                    dungeon.setGameState(GameState.OFF);
                     return;
                 }
                 for (Player player : dungeon.getPlayersFromUUID(dungeon.getAllPlayersInGame())) {
@@ -53,11 +53,12 @@ public class GameRun {
                                 default : {}
                             }
 
-                        } else if (room.isHasBeenEntered() && room.getSpawnedMobs().size() < 1 && !room.isCompleted()) {
-                            player.sendMessage("All the mobs have been killed in this room!");
-                            room.setCompleted(true);
+                        } else if (room.isHasBeenEntered() && !room.isCompleted()){
+                            checkIfObjectiveIsCompleted(room);
+                        } else if (room.isHasBeenEntered() && room.isCompleted() && !room.hasRunCompletedSequence()) {
+                            player.sendMessage("This room is complete.");
+                            room.setHasRunCompletedSequence(true);
                             room.openDoors();
-
                         }
                     }
                 }
@@ -66,6 +67,7 @@ public class GameRun {
     }
 
     private void runMobKillRoom(Room room, Player player) {
+        List<Entity> spawnedMobs = new ArrayList<>();
         if (room instanceof BossRoom) {
             MythicMob mob = MythicBukkit.inst().getMobManager().getMythicMob("SkeletalKnight").orElse(null);
             if (mob != null) {
@@ -81,6 +83,21 @@ public class GameRun {
             }
             room.setSpawnedMobs(spawnedMobs);
         }
+    }
+
+    private void checkIfObjectiveIsCompleted(Room room) {
+
+        switch (room.getType()) {
+            case "mob_kill": {
+                if (room.getSpawnedMobs().size() < 1) {
+                    room.setCompleted(true);
+                }
+            }
+            default: {
+
+            }
+        }
+
     }
 
 }

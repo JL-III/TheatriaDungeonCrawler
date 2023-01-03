@@ -15,6 +15,7 @@ public class Room {
     private final List<Location> region;
     private boolean hasBeenEntered = false;
     private boolean isCompleted = false;
+    private boolean hasRunCompletedSequence = false;
     private final List<EntityType> mobs;
     private final List<Location> spawnLocations;
     private List<Entity> spawnedMobs;
@@ -85,5 +86,13 @@ public class Room {
     }
 
     public String getType() { return type; }
+
+    public boolean hasRunCompletedSequence() {
+        return hasRunCompletedSequence;
+    }
+
+    public void setHasRunCompletedSequence(boolean hasRunCompletedSequence) {
+        this.hasRunCompletedSequence = hasRunCompletedSequence;
+    }
 
 }
