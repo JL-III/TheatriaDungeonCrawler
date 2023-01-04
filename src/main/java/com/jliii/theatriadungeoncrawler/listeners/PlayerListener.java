@@ -65,6 +65,7 @@ public class PlayerListener implements Listener {
 
     @EventHandler
     public void OnPlayerDisconnect(PlayerQuitEvent event) {
+        if (dungeonMaster.getPlayerGameMap().get(event.getPlayer().getUniqueId()) == null) return;
         event.getPlayer().teleport(dungeonMaster.getDungeonByKey(dungeonMaster.getPlayerGameMap().get(event.getPlayer().getUniqueId())).getSignLocations().get(0));
         dungeonMaster.getPlayerGameMap().remove(event.getPlayer().getUniqueId());
         dungeonMaster.updateSigns();

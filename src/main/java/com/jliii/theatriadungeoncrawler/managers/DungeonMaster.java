@@ -73,7 +73,7 @@ public class DungeonMaster {
             } catch (Exception ex) {
                 Bukkit.getConsoleSender().sendMessage(ChatColor.YELLOW + "There is an dungeon without rooms, please check the config.");
             }
-            dungeons.add(new Dungeon(plugin, worldKey, dungeonKey, rooms, signLocations, spawnLocations, playerGameMap));
+            dungeons.add(new Dungeon(plugin, this, worldKey, dungeonKey, rooms, signLocations, spawnLocations, playerGameMap));
         }
         updateSigns();
     }

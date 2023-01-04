@@ -1,6 +1,7 @@
 package com.jliii.theatriadungeoncrawler.objects;
 
 import com.jliii.theatriadungeoncrawler.enums.GameState;
+import com.jliii.theatriadungeoncrawler.managers.DungeonMaster;
 import com.jliii.theatriadungeoncrawler.tasks.GameRun;
 import com.jliii.theatriadungeoncrawler.util.GeneralUtils;
 import org.bukkit.Bukkit;
@@ -14,6 +15,7 @@ import java.util.stream.Collectors;
 
 public class Dungeon {
 
+    private DungeonMaster dungeonMaster;
     private String key;
     private String worldKey;
     private boolean isComplete;
@@ -27,7 +29,8 @@ public class Dungeon {
     private List<Location> signLocations;
 
 
-    public Dungeon(Plugin plugin, String worldKey, String key, List<Room> rooms, List<Location> signLocations, List<Location> spawnLocations, HashMap<UUID, String> playerGameMap) {
+    public Dungeon(Plugin plugin, DungeonMaster dungeonMaster, String worldKey, String key, List<Room> rooms, List<Location> signLocations, List<Location> spawnLocations, HashMap<UUID, String> playerGameMap) {
+        this.dungeonMaster = dungeonMaster;
         this.rooms = rooms;
         this.worldKey = worldKey;
         this.signLocations = signLocations;
@@ -46,6 +49,7 @@ public class Dungeon {
         switch (gameState) {
             case OFF:
                 //give access to dungeon master to update signs on state changes.
+                dungeonMaster.updateSigns();
                 reset();
                 break;
             case LOBBY:
@@ -53,22 +57,32 @@ public class Dungeon {
             case STARTING:
                 break;
             case ACTIVE:
-                for (Room room : getRooms()) {
-                    room.resetDoors();
-                }
-                for (UUID uuid : playerGameMap.keySet()) {
-                    if (playerGameMap.get(uuid).equalsIgnoreCase(key)) {
-                        if (Bukkit.getPlayer(uuid) != null) {
-                            Bukkit.getPlayer(uuid).teleport(spawnLocations.get(GeneralUtils.getRandomNumber(0, spawnLocations.size() - 1)));
-                        }
-                    }
-                }
+                setup();
                 game.Run();
                 break;
             case WON:
                 break;
             default:
                 break;
+        }
+    }
+
+    public void reset() {
+        for (Room room : getRooms()) {
+            room.resetDoors();
+            room.setCompleted(false);
+            room.setHasBeenEntered(false);
+            room.setSpawnedMobs(null);
+        }
+    }
+
+    public void setup() {
+        for (UUID uuid : playerGameMap.keySet()) {
+            if (playerGameMap.get(uuid).equalsIgnoreCase(key)) {
+                if (Bukkit.getPlayer(uuid) != null) {
+                    Bukkit.getPlayer(uuid).teleport(spawnLocations.get(GeneralUtils.getRandomNumber(0, spawnLocations.size() - 1)));
+                }
+            }
         }
     }
 
@@ -98,14 +112,6 @@ public class Dungeon {
             }
         }
         return miniBossRooms;
-    }
-
-    public void reset() {
-        for (Room room : getRooms()) {
-            room.setCompleted(false);
-            room.setHasBeenEntered(false);
-            room.setSpawnedMobs(null);
-        }
     }
 
     public String getKey() {
@@ -144,9 +150,7 @@ public class Dungeon {
         return game;
     }
 
-    public boolean isComplete() {
-        return isComplete;
-    }
+    public boolean isComplete() { return isComplete; }
 
     public void setComplete(boolean complete) {
         isComplete = complete;
