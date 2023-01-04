@@ -2,11 +2,11 @@ package com.jliii.theatriadungeoncrawler.objects;
 
 import com.jliii.theatriadungeoncrawler.enums.GameState;
 import com.jliii.theatriadungeoncrawler.managers.DungeonMaster;
+import com.jliii.theatriadungeoncrawler.managers.DungeonPartyManager;
 import com.jliii.theatriadungeoncrawler.tasks.GameRun;
 import com.jliii.theatriadungeoncrawler.util.GeneralUtils;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
-import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 
@@ -24,18 +24,21 @@ public class Dungeon {
     List<BossRoom> bossRooms;
     GameState gameState = GameState.OFF;
     GameRun game;
+    private DungeonPartyManager dungeonPartyManager;
     private HashMap<UUID,String> playerGameMap;
+
     private final List<Location> spawnLocations;
     private List<Location> signLocations;
 
 
-    public Dungeon(Plugin plugin, DungeonMaster dungeonMaster, String worldKey, String key, List<Room> rooms, List<Location> signLocations, List<Location> spawnLocations, HashMap<UUID, String> playerGameMap) {
+    public Dungeon(Plugin plugin, DungeonMaster dungeonMaster, DungeonPartyManager dungeonPartyManager, String worldKey, String key, List<Room> rooms, List<Location> signLocations, List<Location> spawnLocations) {
         this.dungeonMaster = dungeonMaster;
+        this.dungeonPartyManager = dungeonPartyManager;
         this.rooms = rooms;
         this.worldKey = worldKey;
         this.signLocations = signLocations;
         this.spawnLocations = spawnLocations;
-        this.playerGameMap = playerGameMap;
+        this.playerGameMap = dungeonPartyManager.getPlayerGameMap();
         this.key = key;
         this.miniBossRooms = getMiniBossRooms();
         this.bossRooms = getBossRooms();
@@ -154,6 +157,14 @@ public class Dungeon {
 
     public void setComplete(boolean complete) {
         isComplete = complete;
+    }
+
+    public DungeonPartyManager getDungeonPartyManager() {
+        return dungeonPartyManager;
+    }
+
+    public void setDungeonPartyManager(DungeonPartyManager dungeonPartyManager) {
+        this.dungeonPartyManager = dungeonPartyManager;
     }
 
 }

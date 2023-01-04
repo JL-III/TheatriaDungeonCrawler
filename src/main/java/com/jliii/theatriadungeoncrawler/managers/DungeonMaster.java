@@ -1,14 +1,10 @@
 package com.jliii.theatriadungeoncrawler.managers;
 
-import com.jliii.theatriadungeoncrawler.objects.BossRoom;
-import com.jliii.theatriadungeoncrawler.objects.Dungeon;
-import com.jliii.theatriadungeoncrawler.objects.MiniBossRoom;
-import com.jliii.theatriadungeoncrawler.objects.Room;
+import com.jliii.theatriadungeoncrawler.objects.*;
 import com.jliii.theatriadungeoncrawler.util.GeneralUtils;
 import com.jliii.theatriadungeoncrawler.util.ListGenerators;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
 import org.bukkit.Bukkit;
-import org.bukkit.ChatColor;
 import org.bukkit.Location;
 import org.bukkit.block.Sign;
 import org.bukkit.configuration.ConfigurationSection;
@@ -24,7 +20,8 @@ public class DungeonMaster {
     private FileConfiguration fileConfiguration;
     private List<Dungeon> dungeons = new ArrayList<>();
     private List<Room> rooms = new ArrayList<>();
-    private HashMap<UUID, String> playerGameMap = new HashMap<>();
+    private DungeonPartyManager dungeonPartyManager;
+
     private List<String> dungeonKeys;
 
     public DungeonMaster(Plugin plugin) {
@@ -37,7 +34,6 @@ public class DungeonMaster {
         plugin.reloadConfig();
         rooms = new ArrayList<>();
         dungeons = new ArrayList<>();
-        playerGameMap = new HashMap<>();
         updateSignLocations();
         this.fileConfiguration = plugin.getConfig();
         load();
@@ -45,35 +41,33 @@ public class DungeonMaster {
 
     public void load() {
         this.dungeonKeys = getDungeonKeysFromConfig();
+        dungeonPartyManager = new DungeonPartyManager();
         for (String dungeonKey : dungeonKeys) {
             String worldKey = getWorldKeyFromConfig(dungeonKey);
             List<Location> signLocations = getDungeonCoordinateLocations(worldKey, dungeonKey, "join-sign-locations");
             List<Location> spawnLocations = getDungeonCoordinateLocations(worldKey, dungeonKey, "spawn-locations");
-            try {
-                for (String roomKey : getDungeonRoomKeysFromConfig(dungeonKey)) {
-                    try {
-                        Location pos1 = GeneralUtils.parseLocation(plugin.getConfig(), "dungeons." + dungeonKey + ".rooms." + roomKey + ".region." + ".pos1", Bukkit.getWorld(worldKey));
-                        Location pos2 = GeneralUtils.parseLocation(plugin.getConfig(), "dungeons." + dungeonKey + ".rooms." + roomKey + ".region." + ".pos2", Bukkit.getWorld(worldKey));
-                        List<Location> regionLocations = ListGenerators.getRegionLocations(pos1, pos2);
-                        List<Location> mobSpawnLocations = getMobSpawnLocations(worldKey, dungeonKey, roomKey);
-                        Location exitLocation = getExitLocation(worldKey, dungeonKey, roomKey);
-                        List<EntityType> entityTypes = ListGenerators.getRandomEntityTypes();
-                        String roomType = getRoomType(dungeonKey, roomKey);
-                        if (roomKey.equalsIgnoreCase("boss")) {
-                            rooms.add(new BossRoom(roomKey, roomType,  regionLocations, dungeonKey, mobSpawnLocations, exitLocation, entityTypes));
-                        } else if (roomKey.equalsIgnoreCase("mini-boss")){
-                            rooms.add(new MiniBossRoom(roomKey, roomType,  regionLocations, dungeonKey, mobSpawnLocations, exitLocation, entityTypes));
-                        } else {
-                            rooms.add(new Room(roomKey, roomType, regionLocations, dungeonKey, mobSpawnLocations, exitLocation, entityTypes));
-                        }
-                    } catch (Exception ex) {
-                        ex.printStackTrace();
+            for (String roomKey : getDungeonRoomKeysFromConfig(dungeonKey)) {
+                try {
+                    Location pos1 = GeneralUtils.parseLocation(plugin.getConfig(), "dungeons." + dungeonKey + ".rooms." + roomKey + ".region." + ".pos1", Bukkit.getWorld(worldKey));
+                    Location pos2 = GeneralUtils.parseLocation(plugin.getConfig(), "dungeons." + dungeonKey + ".rooms." + roomKey + ".region." + ".pos2", Bukkit.getWorld(worldKey));
+                    if (pos1 == null || pos2 == null)  throw new RuntimeException("check the positions for the room region in config.");
+                    List<Location> regionLocations = ListGenerators.getRegionLocations(pos1, pos2);
+                    List<Location> mobSpawnLocations = getMobSpawnLocations(worldKey, dungeonKey, roomKey);
+                    Location exitLocation = getExitLocation(worldKey, dungeonKey, roomKey);
+                    List<EntityType> entityTypes = ListGenerators.getRandomEntityTypes();
+                    String roomType = getRoomType(dungeonKey, roomKey);
+                    if (roomKey.equalsIgnoreCase("boss")) {
+                        rooms.add(new BossRoom(roomKey, roomType,  regionLocations, dungeonKey, mobSpawnLocations, exitLocation, entityTypes));
+                    } else if (roomKey.equalsIgnoreCase("mini-boss")){
+                        rooms.add(new MiniBossRoom(roomKey, roomType,  regionLocations, dungeonKey, mobSpawnLocations, exitLocation, entityTypes));
+                    } else {
+                        rooms.add(new Room(roomKey, roomType, regionLocations, dungeonKey, mobSpawnLocations, exitLocation, entityTypes));
                     }
+                } catch (Exception ex) {
+                    ex.printStackTrace();
                 }
-            } catch (Exception ex) {
-                Bukkit.getConsoleSender().sendMessage(ChatColor.YELLOW + "There is an dungeon without rooms, please check the config.");
             }
-            dungeons.add(new Dungeon(plugin, this, worldKey, dungeonKey, rooms, signLocations, spawnLocations, playerGameMap));
+            dungeons.add(new Dungeon(plugin, this, dungeonPartyManager, worldKey, dungeonKey, rooms, signLocations, spawnLocations));
         }
         updateSigns();
     }
@@ -195,8 +189,12 @@ public class DungeonMaster {
         updateSigns();
     }
 
-    public HashMap<UUID, String> getPlayerGameMap() {
-        return playerGameMap;
+    public DungeonPartyManager getDungeonPartyManager() {
+        return dungeonPartyManager;
+    }
+
+    public void setDungeonPartyManager(DungeonPartyManager dungeonPartyManager) {
+        this.dungeonPartyManager = dungeonPartyManager;
     }
 
 }
