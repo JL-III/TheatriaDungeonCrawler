@@ -9,7 +9,7 @@ import org.bukkit.plugin.Plugin;
 
 import java.util.List;
 
-public class Room implements RoomInterface {
+public abstract class Room implements RoomInterface {
 
     private final String key;
     private final String parentKey;
