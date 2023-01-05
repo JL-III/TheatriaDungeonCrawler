@@ -40,6 +40,17 @@ public class ParkourRoom extends Room {
         }.runTaskTimer(plugin, 0, 10).getTaskId();
     }
 
+    @Override
+    public void reset() {
+        resetDoors();
+        setCompleted(false);
+        setHasBeenEntered(false);
+        setSpawnedMobs(null);
+        setCompleted(false);
+        setHasRunCompletedSequence(false);
+        setBlockReached(false);
+    }
+
     public void setBlockReached(Boolean set) {
         this.blockReached = set;
     }

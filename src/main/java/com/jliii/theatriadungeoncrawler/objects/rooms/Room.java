@@ -93,6 +93,15 @@ public abstract class Room implements RoomInterface {
         this.hasRunCompletedSequence = hasRunCompletedSequence;
     }
 
+    public void reset() {
+        resetDoors();
+        setCompleted(false);
+        setHasBeenEntered(false);
+        setSpawnedMobs(null);
+        setCompleted(false);
+        setHasRunCompletedSequence(false);
+    }
+
     @Override
     public boolean isObjectiveCompleted() {
         return false;

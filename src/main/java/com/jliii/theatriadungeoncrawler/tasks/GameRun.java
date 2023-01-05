@@ -29,28 +29,21 @@ public class GameRun {
                     cancel();
                     runnables.forEach(x -> Bukkit.getScheduler().cancelTask(x));
                     plugin.getLogger().info("Cancelling runnables.");
-//                    for (Integer id : runnables) {
-//                        Bukkit.getScheduler().cancelTask(id);
-//                        plugin.getLogger().info("Runnable with id " + id + " was stopped.");
-//                    }
                     runnables = new ArrayList<>();
                     dungeon.setGameState(GameState.OFF);
-                    return;
-                }
-                for (Player player : dungeon.getPlayersFromUUID(dungeon.getAllPlayersInGame())) {
-                    for (Room room : dungeon.getRooms()) {
-                        if (room.getRegion().contains(player.getLocation().getBlock().getLocation()) && !room.hasBeenEntered() && !room.isCompleted()) {
-                            room.setHasBeenEntered(true);
-                            runnables.add(room.runObjective(player, plugin));
-                        } else if (room.hasBeenEntered() && !room.isCompleted()){
-                            //if the room hasnt already been completed by some other check, like an entity death or interaction then we will check again based on
-                            //a condition here, then we will mark the room as completed so that it can move on in the code
-
-                            room.isObjectiveCompleted();
-                        } else if (room.hasBeenEntered() && room.isCompleted() && !room.hasRunCompletedSequence()) {
-                            player.sendMessage("This room is complete.");
-                            room.setHasRunCompletedSequence(true);
-                            room.openDoors();
+                } else {
+                    for (Player player : dungeon.getPlayersFromUUID(dungeon.getAllPlayersInGame())) {
+                        for (Room room : dungeon.getRooms()) {
+                            if (room.getRegion().contains(player.getLocation().getBlock().getLocation()) && !room.hasBeenEntered() && !room.isCompleted()) {
+                                room.setHasBeenEntered(true);
+                                runnables.add(room.runObjective(player, plugin));
+                            } else if (room.hasBeenEntered() && !room.isCompleted()){
+                                room.isObjectiveCompleted();
+                            } else if (room.hasBeenEntered() && room.isCompleted() && !room.hasRunCompletedSequence()) {
+                                player.sendMessage("This room is complete.");
+                                room.setHasRunCompletedSequence(true);
+                                room.openDoors();
+                            }
                         }
                     }
                 }

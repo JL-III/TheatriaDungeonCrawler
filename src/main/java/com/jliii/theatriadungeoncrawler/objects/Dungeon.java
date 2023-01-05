@@ -75,10 +75,7 @@ public class Dungeon {
 
     public void reset() {
         for (Room room : getRooms()) {
-            room.resetDoors();
-            room.setCompleted(false);
-            room.setHasBeenEntered(false);
-            room.setSpawnedMobs(null);
+            room.reset();
         }
     }
 

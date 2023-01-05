@@ -24,4 +24,6 @@ public interface RoomInterface {
 
     int runObjective(Player player, Plugin plugin);
 
+    void reset();
+
 }

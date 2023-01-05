@@ -48,6 +48,17 @@ public class MobKillRoom extends Room {
 
     }
 
+    @Override
+    public void reset() {
+        resetDoors();
+        setCompleted(false);
+        setHasBeenEntered(false);
+        setSpawnedMobs(null);
+        setCompleted(false);
+        setHasRunCompletedSequence(false);
+        setAllMobsKilled(false);
+    }
+
     private void setAllMobsKilled(Boolean value) { this.allMobsKilled = value; }
 
     private boolean getAllMobsKilled() { return allMobsKilled; }
