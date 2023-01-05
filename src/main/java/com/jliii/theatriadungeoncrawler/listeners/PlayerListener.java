@@ -2,7 +2,7 @@ package com.jliii.theatriadungeoncrawler.listeners;
 
 import com.jliii.theatriadungeoncrawler.managers.DungeonMaster;
 import com.jliii.theatriadungeoncrawler.objects.Dungeon;
-import com.jliii.theatriadungeoncrawler.objects.Room;
+import com.jliii.theatriadungeoncrawler.objects.rooms.Room;
 import com.jliii.theatriadungeoncrawler.util.GeneralUtils;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
@@ -65,9 +65,9 @@ public class PlayerListener implements Listener {
 
     @EventHandler
     public void OnPlayerDisconnect(PlayerQuitEvent event) {
-        if (dungeonMaster.getPlayerGameMap().get(event.getPlayer().getUniqueId()) == null) return;
-        event.getPlayer().teleport(dungeonMaster.getDungeonByKey(dungeonMaster.getPlayerGameMap().get(event.getPlayer().getUniqueId())).getSignLocations().get(0));
-        dungeonMaster.getPlayerGameMap().remove(event.getPlayer().getUniqueId());
+        if (dungeonMaster.getDungeonPartyManager().getPlayerGameMap().get(event.getPlayer().getUniqueId()) == null) return;
+        event.getPlayer().teleport(dungeonMaster.getDungeonByKey(dungeonMaster.getDungeonPartyManager().getPlayerGameMap().get(event.getPlayer().getUniqueId())).getSignLocations().get(0));
+        dungeonMaster.getDungeonPartyManager().getPlayerGameMap().remove(event.getPlayer().getUniqueId());
         dungeonMaster.updateSigns();
     }
 

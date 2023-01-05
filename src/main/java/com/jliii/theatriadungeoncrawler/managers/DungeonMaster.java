@@ -1,6 +1,7 @@
 package com.jliii.theatriadungeoncrawler.managers;
 
 import com.jliii.theatriadungeoncrawler.objects.*;
+import com.jliii.theatriadungeoncrawler.objects.rooms.*;
 import com.jliii.theatriadungeoncrawler.util.GeneralUtils;
 import com.jliii.theatriadungeoncrawler.util.ListGenerators;
 import net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer;
@@ -56,13 +57,20 @@ public class DungeonMaster {
                     Location exitLocation = getExitLocation(worldKey, dungeonKey, roomKey);
                     List<EntityType> entityTypes = ListGenerators.getRandomEntityTypes();
                     String roomType = getRoomType(dungeonKey, roomKey);
-                    if (roomKey.equalsIgnoreCase("boss")) {
-                        rooms.add(new BossRoom(roomKey, roomType,  regionLocations, dungeonKey, mobSpawnLocations, exitLocation, entityTypes));
-                    } else if (roomKey.equalsIgnoreCase("mini-boss")){
-                        rooms.add(new MiniBossRoom(roomKey, roomType,  regionLocations, dungeonKey, mobSpawnLocations, exitLocation, entityTypes));
-                    } else {
-                        rooms.add(new Room(roomKey, roomType, regionLocations, dungeonKey, mobSpawnLocations, exitLocation, entityTypes));
+                    switch (roomType) {
+                        case "mob_kill" -> rooms.add(new MobKillRoom(roomKey, regionLocations, dungeonKey, mobSpawnLocations, exitLocation, entityTypes));
+                        case "mini_boss_kill" -> rooms.add(new MiniBossRoom(roomKey,  regionLocations, dungeonKey, mobSpawnLocations, exitLocation, entityTypes));
+                        case "boss_kill" -> rooms.add(new BossRoom(roomKey,  regionLocations, dungeonKey, mobSpawnLocations, exitLocation, entityTypes));
+                        case "parkour" -> rooms.add(new ParkourRoom(roomKey, regionLocations, dungeonKey, mobSpawnLocations, exitLocation, entityTypes));
+                        default -> throw new RuntimeException("Room type could not be determined, please check the config.");
                     }
+//                    if (roomKey.equalsIgnoreCase("boss")) {
+//                        rooms.add(new BossRoom(roomKey, roomType,  regionLocations, dungeonKey, mobSpawnLocations, exitLocation, entityTypes));
+//                    } else if (roomKey.equalsIgnoreCase("mini-boss")){
+//                        rooms.add(new MiniBossRoom(roomKey, roomType,  regionLocations, dungeonKey, mobSpawnLocations, exitLocation, entityTypes));
+//                    } else {
+//                        rooms.add(new Room(roomKey, roomType, regionLocations, dungeonKey, mobSpawnLocations, exitLocation, entityTypes));
+//                    }
                 } catch (Exception ex) {
                     ex.printStackTrace();
                 }

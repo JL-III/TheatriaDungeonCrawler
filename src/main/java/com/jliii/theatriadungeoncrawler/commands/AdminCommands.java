@@ -3,10 +3,10 @@ package com.jliii.theatriadungeoncrawler.commands;
 import com.jliii.theatriadungeoncrawler.enums.GameState;
 import com.jliii.theatriadungeoncrawler.enums.RoomObjectiveTypes;
 import com.jliii.theatriadungeoncrawler.managers.DungeonMaster;
-import com.jliii.theatriadungeoncrawler.objects.BossRoom;
+import com.jliii.theatriadungeoncrawler.objects.rooms.BossRoom;
 import com.jliii.theatriadungeoncrawler.objects.Dungeon;
-import com.jliii.theatriadungeoncrawler.objects.MiniBossRoom;
-import com.jliii.theatriadungeoncrawler.objects.Room;
+import com.jliii.theatriadungeoncrawler.objects.rooms.MiniBossRoom;
+import com.jliii.theatriadungeoncrawler.objects.rooms.Room;
 import com.jliii.theatriadungeoncrawler.util.GeneralUtils;
 import org.bukkit.Bukkit;
 import org.bukkit.ChatColor;
@@ -74,12 +74,12 @@ public class AdminCommands implements CommandExecutor {
         }
 
         if (args[0].equalsIgnoreCase("leave") && player.hasPermission("theatria.dungeons.leave")) {
-            String dungeonKey = dungeonMaster.getPlayerGameMap().get(player.getUniqueId());
+            String dungeonKey = dungeonMaster.getDungeonPartyManager().getPlayerGameMap().get(player.getUniqueId());
             if (dungeonKey == null) {
                 player.sendMessage("You are not in a dungeon.");
                 return true;
             }
-            dungeonMaster.getPlayerGameMap().remove(player.getUniqueId());
+            dungeonMaster.getDungeonPartyManager().getPlayerGameMap().remove(player.getUniqueId());
             player.sendMessage("You have left the dungeon.");
             if (dungeonMaster.getDungeonByKey(dungeonKey).getSignLocations().size() > 0) {
                 player.teleport(dungeonMaster.getDungeonByKey(dungeonKey).getSignLocations().get(0));
@@ -114,7 +114,6 @@ public class AdminCommands implements CommandExecutor {
                 player.sendMessage(ChatColor.YELLOW + "Dungeon: " + ChatColor.GREEN + room.getParentKey() + ChatColor.DARK_PURPLE
                         + " || " + ChatColor.YELLOW + roomInstanceType + " " + ChatColor.GREEN + room.getKey() + ChatColor.DARK_PURPLE
                         + " || " + ChatColor.YELLOW + " complete: " + ChatColor.GREEN + room.isCompleted() + ChatColor.DARK_PURPLE
-                        + " || " + ChatColor.YELLOW + " type: " + ChatColor.GREEN + room.getType() + ChatColor.DARK_PURPLE
                         + " || " + ChatColor.YELLOW + " exit: " + ChatColor.GREEN + (room.getExitLocation() != null));
             }
         }

@@ -1,30 +1,29 @@
-package com.jliii.theatriadungeoncrawler.objects;
+package com.jliii.theatriadungeoncrawler.objects.rooms;
 
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.EntityType;
+import org.bukkit.entity.Player;
+import org.bukkit.plugin.Plugin;
 
 import java.util.List;
 
-public class Room {
+public class Room implements RoomInterface {
 
     private final String key;
     private final String parentKey;
-    private final String type;
     private final List<Location> region;
     private boolean hasBeenEntered = false;
     private boolean isCompleted = false;
     private boolean hasRunCompletedSequence = false;
-    private boolean blockReached = false;
     private final List<EntityType> mobs;
     private final List<Location> spawnLocations;
     private List<Entity> spawnedMobs;
     private final Location exitLocation;
 
-    public Room(String key, String type, List<Location> region, String parentKey, List<Location> spawnLocations, Location exitLocation, List<EntityType> mobs) {
+    public Room(String key, List<Location> region, String parentKey, List<Location> spawnLocations, Location exitLocation, List<EntityType> mobs) {
         this.key = key;
-        this.type = type;
         this.region = region;
         this.parentKey = parentKey;
         this.spawnLocations = spawnLocations;
@@ -54,9 +53,9 @@ public class Room {
         return parentKey;
     }
 
-    public void setHasBeenEntered(Boolean set) { this.hasBeenEntered = set; }
+    public void setHasBeenEntered(Boolean value) { this.hasBeenEntered = value; }
 
-    public boolean isHasBeenEntered() { return hasBeenEntered; }
+    public boolean hasBeenEntered() { return hasBeenEntered; }
 
     public List<EntityType> getMobs() {
         return mobs;
@@ -86,8 +85,6 @@ public class Room {
         return exitLocation;
     }
 
-    public String getType() { return type; }
-
     public boolean hasRunCompletedSequence() {
         return hasRunCompletedSequence;
     }
@@ -96,11 +93,13 @@ public class Room {
         this.hasRunCompletedSequence = hasRunCompletedSequence;
     }
 
-    public void setBlockReached(Boolean set) {
-        this.blockReached = set;
+    @Override
+    public boolean isObjectiveCompleted() {
+        return false;
     }
 
-    public boolean getBlockReached() {
-        return blockReached;
+    @Override
+    public int runObjective(Player player, Plugin plugin) {
+        return 0;
     }
 }
