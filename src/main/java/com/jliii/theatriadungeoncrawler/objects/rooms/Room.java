@@ -9,7 +9,7 @@ import org.bukkit.plugin.Plugin;
 
 import java.util.List;
 
-public abstract class Room implements RoomInterface {
+public abstract class Room {
 
     private final String key;
     private final String parentKey;
@@ -102,12 +102,10 @@ public abstract class Room implements RoomInterface {
         setHasRunCompletedSequence(false);
     }
 
-    @Override
     public boolean isObjectiveCompleted() {
         return false;
     }
 
-    @Override
     public int runObjective(Player player, Plugin plugin) {
         return 0;
     }

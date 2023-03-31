@@ -62,6 +62,7 @@ public class DungeonMaster {
                         case "mini_boss_kill" -> rooms.add(new MiniBossRoom(roomKey,  regionLocations, dungeonKey, mobSpawnLocations, exitLocation, entityTypes));
                         case "boss_kill" -> rooms.add(new BossRoom(roomKey,  regionLocations, dungeonKey, mobSpawnLocations, exitLocation, entityTypes));
                         case "parkour" -> rooms.add(new ParkourRoom(roomKey, regionLocations, dungeonKey, mobSpawnLocations, exitLocation, entityTypes));
+                        case "survive" -> rooms.add(new SurviveRoom(roomKey, regionLocations, dungeonKey, mobSpawnLocations, exitLocation, entityTypes));
                         default -> throw new RuntimeException("Room type could not be determined, please check the config.");
                     }
 //                    if (roomKey.equalsIgnoreCase("boss")) {

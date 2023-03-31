@@ -4,3 +4,4 @@ main: com.jliii.theatriadungeoncrawler.TheatriaDungeonCrawler
 api-version: 1.19
 commands:
   dungeons:
+  box:

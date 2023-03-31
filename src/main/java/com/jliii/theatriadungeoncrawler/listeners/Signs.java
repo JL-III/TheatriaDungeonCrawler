@@ -61,9 +61,10 @@ public class Signs implements Listener {
                         }
                     }
                 }
+            } else {
+                event.getPlayer().sendMessage("Blockbreak cancelled.");
+                event.setCancelled(true);
             }
-        } else {
-            event.setCancelled(true);
         }
     }
 
@@ -73,7 +74,8 @@ public class Signs implements Listener {
         if (!event.getAction().isLeftClick()) return;
         if (event.getClickedBlock() != null && event.getClickedBlock().getType() == Material.OAK_WALL_SIGN) {
             Sign sign = (Sign) event.getClickedBlock().getState();
-            if (PlainTextComponentSerializer.plainText().serialize(sign.line(0)).equals("[Dungeons]") && dungeonMaster.getDungeonKeys().contains(PlainTextComponentSerializer.plainText().serialize(sign.line(1)))) {
+            if (PlainTextComponentSerializer.plainText().serialize(sign.line(0)).equals("[Dungeons]")
+                    && dungeonMaster.getDungeonKeys().contains(PlainTextComponentSerializer.plainText().serialize(sign.line(1)))) {
                 String dungeonKey = PlainTextComponentSerializer.plainText().serialize(sign.line(1));
                 Dungeon dungeon = dungeonMaster.getDungeonByKey(dungeonKey);
                 dungeon.addToPlayersInGame(player);

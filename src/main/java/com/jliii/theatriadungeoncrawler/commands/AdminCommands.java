@@ -39,6 +39,7 @@ public class AdminCommands implements CommandExecutor {
 
         if (!(sender instanceof Player player)) return false;
         if (!player.hasPermission("theatria.dungeons.admin")) return true;
+        if (args.length < 1) return false;
 
         if (args[0].equalsIgnoreCase("start") && player.hasPermission("theatria.dungeons.admin.start") && args.length == 2) {
             if (isDungeonKeyInvalid(args[1])) {

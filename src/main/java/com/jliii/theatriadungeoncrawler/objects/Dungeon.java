@@ -98,23 +98,17 @@ public class Dungeon {
     }
 
     public List<BossRoom> getBossRooms() {
-        List<BossRoom> bossRooms = new ArrayList<>();
-        for (Room room : rooms) {
-            if (room instanceof BossRoom bossRoom) {
-                bossRooms.add(bossRoom);
-            }
-        }
-        return bossRooms;
+        return rooms.stream()
+                .filter(room -> room instanceof BossRoom)
+                .map(room -> (BossRoom) room)
+                .collect(Collectors.toList());
     }
 
     public List<MiniBossRoom> getMiniBossRooms() {
-        List<MiniBossRoom> miniBossRooms = new ArrayList<>();
-        for (Room room : rooms) {
-            if (room instanceof MiniBossRoom miniBossRoom) {
-                miniBossRooms.add(miniBossRoom);
-            }
-        }
-        return miniBossRooms;
+        return rooms.stream()
+                .filter(room -> room instanceof MiniBossRoom)
+                .map(room -> (MiniBossRoom) room)
+                .collect(Collectors.toList());
     }
 
     public String getKey() {
