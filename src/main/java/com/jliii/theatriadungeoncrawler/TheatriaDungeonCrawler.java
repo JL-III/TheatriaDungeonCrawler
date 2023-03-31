@@ -9,6 +9,8 @@ import com.jliii.theatriadungeoncrawler.runnables.WorkloadRunnable;
 import org.bukkit.Bukkit;
 import org.bukkit.plugin.java.JavaPlugin;
 
+import java.util.Objects;
+
 public final class TheatriaDungeonCrawler extends JavaPlugin {
 
     private final WorkloadRunnable workloadRunnable = new WorkloadRunnable();
@@ -22,8 +24,8 @@ public final class TheatriaDungeonCrawler extends JavaPlugin {
         DungeonMaster dungeonMaster = new DungeonMaster(this);
         Bukkit.getPluginManager().registerEvents(new PlayerListener(dungeonMaster), this);
         Bukkit.getPluginManager().registerEvents(new Signs(this, dungeonMaster), this);
-        Bukkit.getPluginCommand("dungeons").setExecutor(new AdminCommands(this, dungeonMaster));
-        Bukkit.getPluginCommand("box").setExecutor(new Box(this, workloadRunnable));
+        Objects.requireNonNull(Bukkit.getPluginCommand("dungeons")).setExecutor(new AdminCommands(this, dungeonMaster));
+        Objects.requireNonNull(Bukkit.getPluginCommand("box")).setExecutor(new Box(this, workloadRunnable));
     }
 
     @Override
