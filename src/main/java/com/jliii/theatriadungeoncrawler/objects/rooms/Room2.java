@@ -1,5 +1,7 @@
 package com.jliii.theatriadungeoncrawler.objects.rooms;
 
+import lombok.AllArgsConstructor;
+import lombok.Getter;
 import org.bukkit.Location;
 import org.bukkit.World;
 
@@ -7,11 +9,16 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 
+@AllArgsConstructor
 public class Room2 {
 
+    @Getter
     private final Location cornerA;
+    @Getter
     private final Location cornerB;
+    @Getter
     private Location entryPoint;
+    @Getter
     private Location corridorConnectionPoint;
 
     public Room2(Location cornerA, Location cornerB) {
@@ -48,12 +55,5 @@ public class Room2 {
         corridorConnectionPoint = wallCenters.get(corridorIndex);
     }
 
-    public Location getEntryPoint() {
-        return entryPoint;
-    }
-
-    public Location getCorridorConnectionPoint() {
-        return corridorConnectionPoint;
-    }
 
 }

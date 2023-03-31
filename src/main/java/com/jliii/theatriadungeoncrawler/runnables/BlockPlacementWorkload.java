@@ -24,7 +24,6 @@ public class BlockPlacementWorkload implements Workload {
     @Override
     public void compute() {
         World world = Bukkit.getWorld(this.worldID);
-        Bukkit.getConsoleSender().sendMessage("BlockPlacementWorkload.compute() called");
         Preconditions.checkState(world != null);
         world.getBlockAt(this.blockX, this.blockY, this.blockZ).setType(this.material);
         world.getBlockAt(this.blockX, this.blockY, this.blockZ).getState().update(true, false);
