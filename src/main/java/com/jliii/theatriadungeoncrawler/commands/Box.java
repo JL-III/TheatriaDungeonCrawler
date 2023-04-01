@@ -48,6 +48,21 @@ public class Box implements CommandExecutor {
             return true;
         }
 
+        if (args[0].equalsIgnoreCase("next")) {
+            workloadRunnable.executeNextWorkload();
+            return true;
+        }
+
+        if (args[0].equalsIgnoreCase("play")) {
+            workloadRunnable.setManualExecution(false);
+            return true;
+        }
+
+        if (args[0].equalsIgnoreCase("pause")) {
+            workloadRunnable.setManualExecution(true);
+            return true;
+        }
+
         if (args[0].equalsIgnoreCase("create")) {
             if (args.length != 5) {
                 player.sendMessage("Usage: /box create length height width theme");
@@ -69,7 +84,7 @@ public class Box implements CommandExecutor {
             Location cornerA = player.getLocation().add(1, 0, 1); // Add an offset to not spawn the box inside the player
             Location cornerB = cornerA.clone().add(length, height, width);
 
-            new DistributedFiller(this.workloadRunnable).fillHollowBox(cornerA, cornerB, dungeonType);
+            new DistributedFiller(this.workloadRunnable, player).fillHollowBox(cornerA, cornerB, dungeonType);
             Room2 room = new Room2(cornerA, cornerB);
             rooms.add(room);
             player.sendMessage("Created a themed hollow box. Entry point: " + room.getEntryPoint() + ", Corridor connection point: " + room.getCorridorConnectionPoint());
@@ -99,7 +114,7 @@ public class Box implements CommandExecutor {
             Location cornerA = player.getLocation().add(1, 0, 1); // Add an offset to not spawn the box inside the player
             Location cornerB = cornerA.clone().add(length, height, width);
 
-            new DistributedFiller(this.workloadRunnable).fillObstacleCourse(cornerA, cornerB, dungeonType);
+            new DistributedFiller(this.workloadRunnable, player).fillObstacleCourse(cornerA, cornerB, dungeonType);
             Room2 room = new Room2(cornerA, cornerB);
             rooms.add(room);
             player.sendMessage("Created a themed hollow box. Entry point: " + room.getEntryPoint() + ", Corridor connection point: " + room.getCorridorConnectionPoint());
@@ -146,7 +161,7 @@ public class Box implements CommandExecutor {
         }
 
         // Create the corridor
-        new DistributedFiller(this.workloadRunnable).fillHollowCorridor(corridorStart, corridorEnd, corridorMaterial);
+        new DistributedFiller(this.workloadRunnable, player).fillHollowCorridor(corridorStart, corridorEnd, corridorMaterial);
         player.sendMessage("Created a corridor with " + corridorMaterial.name() + " connecting to the room.");
     }
 

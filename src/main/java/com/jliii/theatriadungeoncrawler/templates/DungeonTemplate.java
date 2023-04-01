@@ -11,9 +11,11 @@ public class DungeonTemplate {
     public enum DungeonType {
         ICE(new Material[]{Material.PACKED_ICE, Material.BLUE_ICE, Material.SNOW_BLOCK}),
         STONE(new Material[]{Material.COBBLESTONE, Material.MOSSY_COBBLESTONE, Material.STONE}),
-        NETHER(new Material[]{Material.NETHERRACK, Material.SOUL_SAND, Material.BASALT});
+        NETHER(new Material[]{Material.NETHERRACK, Material.SOUL_SAND, Material.BASALT}),
+        DEBUG(new Material[]{Material.RED_WOOL, Material.YELLOW_WOOL});
 
         private final Material[] materials;
+        private int lastMaterialIndex = -1;
 
         DungeonType(Material[] materials) {
             this.materials = materials;
@@ -25,8 +27,13 @@ public class DungeonTemplate {
     }
 
     public static Material getRandomMaterial(DungeonType dungeonType) {
-        Material[] materials = dungeonType.getMaterials();
-        return materials[RANDOM.nextInt(materials.length)];
+        if (dungeonType == DungeonType.DEBUG) {
+            dungeonType.lastMaterialIndex = (dungeonType.lastMaterialIndex + 1) % 2;
+            return dungeonType.getMaterials()[dungeonType.lastMaterialIndex];
+        } else {
+            Material[] materials = dungeonType.getMaterials();
+            return materials[RANDOM.nextInt(materials.length)];
+        }
     }
 }
 

@@ -1,6 +1,7 @@
 package com.jliii.theatriadungeoncrawler.runnables;
 
 import com.google.common.base.Preconditions;
+import com.jliii.theatriadungeoncrawler.TheatriaDungeonCrawler;
 import com.jliii.theatriadungeoncrawler.templates.DungeonTemplate;
 import com.jliii.theatriadungeoncrawler.util.Coord;
 import lombok.AllArgsConstructor;
@@ -9,6 +10,7 @@ import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
+import org.bukkit.entity.Player;
 import org.bukkit.util.BoundingBox;
 import org.bukkit.util.Vector;
 
@@ -18,7 +20,7 @@ import java.util.*;
 public class DistributedFiller {
 
     private final WorkloadRunnable workloadRunnable;
-
+    private Player player;
 
     public void fillHollowBox(Location cornerA, Location cornerB, DungeonTemplate.DungeonType dungeonType) {
         Preconditions.checkArgument(cornerA.getWorld() == cornerB.getWorld() && cornerA.getWorld() != null);
@@ -37,7 +39,7 @@ public class DistributedFiller {
 
                     if (isEdge) {
                         Material material = DungeonTemplate.getRandomMaterial(dungeonType);
-                        BlockPlacementWorkload blockPlacementWorkload = new BlockPlacementWorkload(world.getUID(), x, y, z, material);
+                        BlockPlacementWorkload blockPlacementWorkload = new BlockPlacementWorkload(world.getUID(), x, y, z, material, player);
                         this.workloadRunnable.addWorkload(blockPlacementWorkload);
                     }
                 }
@@ -65,7 +67,7 @@ public class DistributedFiller {
                             || (z == min.getBlockZ() && z == max.getBlockZ());
 
                     if (isEdge && !isOpenEnd) {
-                        BlockPlacementWorkload blockPlacementWorkload = new BlockPlacementWorkload(world.getUID(), x, y, z, material);
+                        BlockPlacementWorkload blockPlacementWorkload = new BlockPlacementWorkload(world.getUID(), x, y, z, material, player);
                         this.workloadRunnable.addWorkload(blockPlacementWorkload);
                     }
                 }
@@ -83,7 +85,7 @@ public class DistributedFiller {
         for (int x = min.getBlockX(); x <= max.getBlockX(); x++) {
             for (int y = min.getBlockY(); y <= max.getBlockY(); y++) {
                 for (int z = min.getBlockZ(); z <= max.getBlockZ(); z++) {
-                    BlockPlacementWorkload blockPlacementWorkload = new BlockPlacementWorkload(world.getUID(), x, y, z, material);
+                    BlockPlacementWorkload blockPlacementWorkload = new BlockPlacementWorkload(world.getUID(), x, y, z, material, player);
                     this.workloadRunnable.addWorkload(blockPlacementWorkload);
                 }
             }
@@ -107,7 +109,7 @@ public class DistributedFiller {
 
                     if (isSolid || isEdge) {
                         Material material = DungeonTemplate.getRandomMaterial(dungeonType);
-                        BlockPlacementWorkload blockPlacementWorkload = new BlockPlacementWorkload(world.getUID(), x, y, z, material);
+                        BlockPlacementWorkload blockPlacementWorkload = new BlockPlacementWorkload(world.getUID(), x, y, z, material, player);
                         this.workloadRunnable.addWorkload(blockPlacementWorkload);
                     }
                 }
@@ -126,26 +128,27 @@ public class DistributedFiller {
 
         Location currentPoint = startPoint.clone();
         boolean goldBlockReached = false;
-        Set<Pair<Integer, Integer>> blacklistedCoordinates = new HashSet<>();
+        List<Location> blacklistedCoordinates = new ArrayList<>();
 
         while (!goldBlockReached) {
             List<Location> potentialLocations = getPossibleNextLocations(currentPoint, cornerA, cornerB, world, blacklistedCoordinates);
 
-            if (potentialLocations.isEmpty()) {
+            if (potentialLocations.size() <= 1) {
                 goldBlockLocation = moveGoldBlockToCurrentPoint(currentPoint);
                 break;
             }
 
             Location nextPoint = potentialLocations.get(random.nextInt(potentialLocations.size()));
-            placePlatform(world, nextPoint, dungeonType, blacklistedCoordinates, currentPoint);
+            placePlatform(world, nextPoint, dungeonType, blacklistedCoordinates);
 
             currentPoint = nextPoint;
 
             goldBlockReached = checkGoldBlockReachability(goldBlockLocation, currentPoint);
         }
 
-        world.getBlockAt(goldBlockLocation).setType(Material.GOLD_BLOCK);
-        fillHollowBox(cornerA, cornerB, dungeonType);
+        BlockPlacementWorkload blockPlacementWorkload = new BlockPlacementWorkload(world.getUID(), goldBlockLocation.getBlockX(), goldBlockLocation.getBlockY(), goldBlockLocation.getBlockZ(), Material.GOLD_BLOCK, player);
+        this.workloadRunnable.addWorkload(blockPlacementWorkload);
+//        fillHollowBox(cornerA, cornerB, dungeonType);
     }
 
     private Location generateGoldBlockLocation(Location cornerB, World world, Random random) {
@@ -166,7 +169,7 @@ public class DistributedFiller {
         );
     }
 
-    private List<Location> getPossibleNextLocations(Location currentPoint, Location cornerA, Location cornerB, World world, Set<Pair<Integer, Integer>> blacklistedCoordinates) {
+    private List<Location> getPossibleNextLocations(Location currentPoint, Location cornerA, Location cornerB, World world, List<Location> blacklistedCoordinates) {
         int maxHorizontalDistance = 3;
         int minHeightDifference = 1;
         int minHeight = cornerA.getBlockY() + 2;
@@ -178,35 +181,53 @@ public class DistributedFiller {
             for (int z = -maxHorizontalDistance; z <= maxHorizontalDistance; z++) {
                 for (int y = 0; y <= minHeightDifference; y++) {
                     Location potentialLocation = currentPoint.clone().add(x, y, z);
-
-                    // Check if the potential location is within bounds
                     if (potentialLocation.getBlockX() < cornerA.getBlockX() + 1 || potentialLocation.getBlockX() > cornerB.getBlockX() - 1
                             || potentialLocation.getBlockY() < minHeight || potentialLocation.getBlockY() > maxHeight
                             || potentialLocation.getBlockZ() < cornerA.getBlockZ() + 1 || potentialLocation.getBlockZ() > cornerB.getBlockZ() - 1) {
                         continue;
                     }
+                    boolean hasEnoughIntermediateSpace = true;
+                    boolean hasAdjacentBlock = false;
+                    int maxSteps = Math.max(Math.abs(x), Math.abs(z));
+                    for (int step = 0; step <= maxSteps; step++) {
+                        double t = (double) step / maxSteps;
+                        Location intermediatePoint = currentPoint.clone().add(
+                                (potentialLocation.getBlockX() - currentPoint.getBlockX()) * t,
+                                0, // Keep the same y-coordinate for intermediate points
+                                (potentialLocation.getBlockZ() - currentPoint.getBlockZ()) * t
+                        );
+                        boolean hasEnoughVerticalSpace = true;
+                        for (int i = -4; i <= 4; i++) {
+                            if (i == 0) continue; // Skip the current block itself
+                            if (world.getBlockAt(intermediatePoint.clone().add(0, i, 0)).getType() != Material.AIR) {
+                                hasEnoughVerticalSpace = false;
+                                break;
+                            }
+                        }
 
-                    // Check if there's enough space above the potential location
-                    boolean hasEnoughSpace = true;
-                    for (int i = 1; i <= 4; i++) {
-                        if (world.getBlockAt(potentialLocation.clone().add(0, i, 0)).getType() != Material.AIR) {
-                            hasEnoughSpace = false;
+                        if (!hasEnoughVerticalSpace) {
+                            hasEnoughIntermediateSpace = false;
                             break;
                         }
                     }
 
-                    if (!hasEnoughSpace) {
+                    // Check for adjacent blocks
+                    int[] dx = {-1, 1, 0, 0, 1, -1, -1, 1};
+                    int[] dz = {0, 0, -1, 1, 1, -1, 1, -1};
+
+                    for (int i = 0; i < 4; i++) {
+                        Location adjacentLocation = potentialLocation.clone().add(dx[i], 0, dz[i]);
+                        if (world.getBlockAt(adjacentLocation).getType() != Material.AIR) {
+                            hasAdjacentBlock = true;
+                            break;
+                        }
+                    }
+                    if (blacklistedCoordinates.contains(potentialLocation)) {
                         continue;
                     }
-
-
-                    // Check if the potential location shares the same (x, z) coordinates with any of the blacklisted points
-                    Pair<Integer, Integer> potentialCoord = Pair.of(potentialLocation.getBlockX(), potentialLocation.getBlockZ());
-                    if (blacklistedCoordinates.contains(potentialCoord)) {
-                        continue;
+                    if (hasEnoughIntermediateSpace && !hasAdjacentBlock) {
+                        potentialLocations.add(potentialLocation);
                     }
-
-                    potentialLocations.add(potentialLocation);
                 }
             }
         }
@@ -219,10 +240,20 @@ public class DistributedFiller {
         return currentPoint.clone().add(0, 1, 0);
     }
 
-    private void placePlatform(World world, Location nextPoint, DungeonTemplate.DungeonType dungeonType, Set<Pair<Integer, Integer>> blacklistedCoordinates, Location currentPoint) {
+    private void placePlatform(World world, Location nextPoint, DungeonTemplate.DungeonType dungeonType, List<Location> blacklistedCoordinates) {
+        if (blacklistedCoordinates.contains(nextPoint)) return;
         Material platformMaterial = DungeonTemplate.getRandomMaterial(dungeonType);
-        world.getBlockAt(nextPoint).setType(platformMaterial);
-        blacklistedCoordinates.add(Pair.of(currentPoint.getBlockX(), currentPoint.getBlockZ()));
+        BlockPlacementWorkload blockPlacementWorkload = new BlockPlacementWorkload(world.getUID(), nextPoint.getBlockX(), nextPoint.getBlockY(), nextPoint.getBlockZ(), platformMaterial, player);
+        this.workloadRunnable.addWorkload(blockPlacementWorkload);
+
+        for (int i = 0; i <= 4; i++) {
+            for (int dx = -1; dx <= 1; dx++) {
+                for (int dz = -1; dz <= 1; dz++) {
+                    blacklistedCoordinates.add(nextPoint.clone().add(dx, i, dz));
+//                    Bukkit.getConsoleSender().sendMessage("Blacklisted: " + nextPoint.clone().add(dx, i, dz).toString());
+                }
+            }
+        }
     }
 
     private boolean checkGoldBlockReachability(Location goldBlockLocation, Location currentPoint) {
