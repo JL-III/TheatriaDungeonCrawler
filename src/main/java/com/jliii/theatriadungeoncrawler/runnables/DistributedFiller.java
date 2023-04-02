@@ -129,18 +129,20 @@ public class DistributedFiller {
         Location currentPoint = startPoint.clone();
         boolean goldBlockReached = false;
         List<Location> blacklistedCoordinates = new ArrayList<>();
-
-        while (!goldBlockReached) {
+        int yLevelMarkers = 0;
+        while (!goldBlockReached || yLevelMarkers < 4){
             List<Location> potentialLocations = getPossibleNextLocations(currentPoint, cornerA, cornerB, world, blacklistedCoordinates);
 
-            if (potentialLocations.size() <= 1) {
+            if (potentialLocations.isEmpty()) {
                 goldBlockLocation = moveGoldBlockToCurrentPoint(currentPoint);
                 break;
             }
 
             Location nextPoint = potentialLocations.get(random.nextInt(potentialLocations.size()));
             placePlatform(world, nextPoint, dungeonType, blacklistedCoordinates);
-
+            if (currentPoint.getY() == nextPoint.getY()) {
+                yLevelMarkers++;
+            }
             currentPoint = nextPoint;
 
             goldBlockReached = checkGoldBlockReachability(goldBlockLocation, currentPoint);
@@ -148,7 +150,7 @@ public class DistributedFiller {
 
         BlockPlacementWorkload blockPlacementWorkload = new BlockPlacementWorkload(world.getUID(), goldBlockLocation.getBlockX(), goldBlockLocation.getBlockY(), goldBlockLocation.getBlockZ(), Material.GOLD_BLOCK, player);
         this.workloadRunnable.addWorkload(blockPlacementWorkload);
-//        fillHollowBox(cornerA, cornerB, dungeonType);
+        fillHollowBox(cornerA, cornerB, dungeonType);
     }
 
     private Location generateGoldBlockLocation(Location cornerB, World world, Random random) {
@@ -237,7 +239,7 @@ public class DistributedFiller {
 
 
     private Location moveGoldBlockToCurrentPoint(Location currentPoint) {
-        return currentPoint.clone().add(0, 1, 0);
+        return currentPoint.clone().add(0, 0, 0);
     }
 
     private void placePlatform(World world, Location nextPoint, DungeonTemplate.DungeonType dungeonType, List<Location> blacklistedCoordinates) {
@@ -245,6 +247,12 @@ public class DistributedFiller {
         Material platformMaterial = DungeonTemplate.getRandomMaterial(dungeonType);
         BlockPlacementWorkload blockPlacementWorkload = new BlockPlacementWorkload(world.getUID(), nextPoint.getBlockX(), nextPoint.getBlockY(), nextPoint.getBlockZ(), platformMaterial, player);
         this.workloadRunnable.addWorkload(blockPlacementWorkload);
+
+        for (int ex = -2; ex <= 2; ex++) {
+            for (int ez = -2; ez <= 2; ez++) {
+                blacklistedCoordinates.add(nextPoint.clone().add(ex, 2, ez));
+            }
+        }
 
         for (int i = 0; i <= 4; i++) {
             for (int dx = -1; dx <= 1; dx++) {

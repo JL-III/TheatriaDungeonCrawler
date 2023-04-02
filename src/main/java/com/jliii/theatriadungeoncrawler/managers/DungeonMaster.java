@@ -65,13 +65,6 @@ public class DungeonMaster {
                         case "survive" -> rooms.add(new SurviveRoom(roomKey, regionLocations, dungeonKey, mobSpawnLocations, exitLocation, entityTypes));
                         default -> throw new RuntimeException("Room type could not be determined, please check the config.");
                     }
-//                    if (roomKey.equalsIgnoreCase("boss")) {
-//                        rooms.add(new BossRoom(roomKey, roomType,  regionLocations, dungeonKey, mobSpawnLocations, exitLocation, entityTypes));
-//                    } else if (roomKey.equalsIgnoreCase("mini-boss")){
-//                        rooms.add(new MiniBossRoom(roomKey, roomType,  regionLocations, dungeonKey, mobSpawnLocations, exitLocation, entityTypes));
-//                    } else {
-//                        rooms.add(new Room(roomKey, roomType, regionLocations, dungeonKey, mobSpawnLocations, exitLocation, entityTypes));
-//                    }
                 } catch (Exception ex) {
                     ex.printStackTrace();
                 }
