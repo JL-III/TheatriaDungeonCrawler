@@ -1,8 +1,7 @@
 package com.jliii.theatriadungeoncrawler.commands;
 
 import com.jliii.theatriadungeoncrawler.TheatriaDungeonCrawler;
-import com.jliii.theatriadungeoncrawler.objects.rooms.Room;
-import com.jliii.theatriadungeoncrawler.objects.rooms.Room2;
+import com.jliii.theatriadungeoncrawler.objects.Room2;
 import com.jliii.theatriadungeoncrawler.runnables.DistributedFiller;
 import com.jliii.theatriadungeoncrawler.runnables.WorkloadRunnable;
 import com.jliii.theatriadungeoncrawler.templates.DungeonTemplate;

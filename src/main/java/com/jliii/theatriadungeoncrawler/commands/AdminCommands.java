@@ -1,7 +1,7 @@
 package com.jliii.theatriadungeoncrawler.commands;
 
-import com.jliii.theatriadungeoncrawler.enums.GameState;
-import com.jliii.theatriadungeoncrawler.enums.RoomObjectiveTypes;
+import com.jliii.theatriadungeoncrawler.enums.State;
+import com.jliii.theatriadungeoncrawler.enums.ObjectiveTypes;
 import com.jliii.theatriadungeoncrawler.managers.DungeonMaster;
 import com.jliii.theatriadungeoncrawler.objects.rooms.BossRoom;
 import com.jliii.theatriadungeoncrawler.objects.Dungeon;
@@ -47,7 +47,7 @@ public class AdminCommands implements CommandExecutor {
                 return true;
             } else {
                 if (dungeonMaster.getDungeonByKey(args[1]).getGameState().name().equalsIgnoreCase("off")) {
-                    dungeonMaster.getDungeonByKey(args[1]).setGameState(GameState.ACTIVE);
+                    dungeonMaster.getDungeonByKey(args[1]).setGameState(State.ACTIVE);
                     dungeonMaster.updateSigns();
                     logger.info("Dungeon [" + args[1] + "] is starting.");
                     player.sendMessage("Dungeon " + args[1] + " is starting!");
@@ -64,7 +64,7 @@ public class AdminCommands implements CommandExecutor {
                 player.sendMessage("There is no dungeon with that name.");
             } else {
                 if (dungeonMaster.getDungeonByKey(args[1]).getGameState().name().equalsIgnoreCase("active")) {
-                    dungeonMaster.getDungeonByKey(args[1]).setGameState(GameState.OFF);
+                    dungeonMaster.getDungeonByKey(args[1]).setGameState(State.OFF);
                     dungeonMaster.updateSigns();
                     logger.info("Dungeon [" + args[1] + "] is stopping.");
                     player.sendMessage("Dungeon " + args[1] + " is stopping!");
@@ -172,8 +172,8 @@ public class AdminCommands implements CommandExecutor {
                 return true;
             }
             boolean foundValue = false;
-            for (RoomObjectiveTypes roomObjectiveTypes : RoomObjectiveTypes.values()) {
-                if (args[3].equalsIgnoreCase(roomObjectiveTypes.name())) {
+            for (ObjectiveTypes objectiveTypes : ObjectiveTypes.values()) {
+                if (args[3].equalsIgnoreCase(objectiveTypes.name())) {
                     foundValue = true;
                     break;
                 }
@@ -185,8 +185,8 @@ public class AdminCommands implements CommandExecutor {
             } else {
                 player.sendMessage(ChatColor.RED + "That is not a valid room type.");
                 StringBuilder sb = new StringBuilder();
-                for (RoomObjectiveTypes roomObjectiveTypes : RoomObjectiveTypes.values()) {
-                    sb.append(roomObjectiveTypes.name().toLowerCase() + " ");
+                for (ObjectiveTypes objectiveTypes : ObjectiveTypes.values()) {
+                    sb.append(objectiveTypes.name().toLowerCase() + " ");
                 }
                 player.sendMessage(ChatColor.YELLOW + "List of possible room types: " + sb);
             }

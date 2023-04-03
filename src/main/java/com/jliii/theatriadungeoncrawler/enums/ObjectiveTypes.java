@@ -1,6 +1,6 @@
 package com.jliii.theatriadungeoncrawler.enums;
 
-public enum RoomObjectiveTypes {
+public enum ObjectiveTypes {
 
     //players must make it to the target block in order to open the door without dying.
     PARKOUR,

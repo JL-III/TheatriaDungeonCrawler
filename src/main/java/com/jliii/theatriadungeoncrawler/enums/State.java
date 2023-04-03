@@ -1,6 +1,6 @@
 package com.jliii.theatriadungeoncrawler.enums;
 
-public enum GameState {
+public enum State {
 
     OFF(0),
     LOBBY(1),
@@ -11,7 +11,7 @@ public enum GameState {
 
     public final int order;
 
-    GameState(int order) {
+    State(int order) {
         this.order = order;
     }
 

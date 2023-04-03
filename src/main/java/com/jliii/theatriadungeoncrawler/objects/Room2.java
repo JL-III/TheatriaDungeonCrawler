@@ -1,4 +1,4 @@
-package com.jliii.theatriadungeoncrawler.objects.rooms;
+package com.jliii.theatriadungeoncrawler.objects;
 
 import lombok.AllArgsConstructor;
 import lombok.Getter;

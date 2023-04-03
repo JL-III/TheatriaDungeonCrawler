@@ -1,6 +1,6 @@
 package com.jliii.theatriadungeoncrawler.objects;
 
-import com.jliii.theatriadungeoncrawler.enums.GameState;
+import com.jliii.theatriadungeoncrawler.enums.State;
 import com.jliii.theatriadungeoncrawler.managers.DungeonMaster;
 import com.jliii.theatriadungeoncrawler.managers.DungeonPartyManager;
 import com.jliii.theatriadungeoncrawler.objects.rooms.BossRoom;
@@ -25,7 +25,7 @@ public class Dungeon {
     List<Room> rooms;
     List<MiniBossRoom> miniBossRooms;
     List<BossRoom> bossRooms;
-    GameState gameState = GameState.OFF;
+    State state = State.OFF;
     GameRun game;
     private DungeonPartyManager dungeonPartyManager;
     private HashMap<UUID,String> playerGameMap;
@@ -48,11 +48,11 @@ public class Dungeon {
         game = new GameRun(plugin, this);
     }
 
-    public void setGameState(GameState gameState) {
-        if ((this.gameState.order > gameState.order) && gameState != GameState.OFF) return;
-        if (this.gameState == gameState) return;
-        this.gameState = gameState;
-        switch (gameState) {
+    public void setGameState(State state) {
+        if ((this.state.order > state.order) && state != State.OFF) return;
+        if (this.state == state) return;
+        this.state = state;
+        switch (state) {
             case OFF:
                 //give access to dungeon master to update signs on state changes.
                 dungeonMaster.updateSigns();
@@ -119,8 +119,8 @@ public class Dungeon {
         return this.rooms;
     }
 
-    public GameState getGameState() {
-        return gameState;
+    public State getGameState() {
+        return state;
     }
 
     public void addToPlayersInGame(Player playerToAdd) {

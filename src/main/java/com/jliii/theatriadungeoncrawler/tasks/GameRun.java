@@ -1,6 +1,6 @@
 package com.jliii.theatriadungeoncrawler.tasks;
 
-import com.jliii.theatriadungeoncrawler.enums.GameState;
+import com.jliii.theatriadungeoncrawler.enums.State;
 import com.jliii.theatriadungeoncrawler.objects.Dungeon;
 import com.jliii.theatriadungeoncrawler.objects.rooms.Room;
 import org.bukkit.Bukkit;
@@ -30,7 +30,7 @@ public class GameRun {
                     runnables.forEach(x -> Bukkit.getScheduler().cancelTask(x));
                     plugin.getLogger().info("Cancelling runnables.");
                     runnables = new ArrayList<>();
-                    dungeon.setGameState(GameState.OFF);
+                    dungeon.setGameState(State.OFF);
                 } else {
                     for (Player player : dungeon.getPlayersFromUUID(dungeon.getAllPlayersInGame())) {
                         for (Room room : dungeon.getRooms()) {
