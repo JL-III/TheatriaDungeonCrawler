@@ -69,7 +69,7 @@ public class DungeonMaster {
                     ex.printStackTrace();
                 }
             }
-            dungeons.add(new Dungeon(plugin, this, dungeonPartyManager, worldKey, dungeonKey, rooms, signLocations, spawnLocations));
+//            dungeons.add(new Dungeon(plugin, this, dungeonPartyManager, worldKey, dungeonKey, rooms, signLocations, spawnLocations));
         }
         updateSigns();
     }

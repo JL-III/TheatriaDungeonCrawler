@@ -18,7 +18,7 @@ public class BlockPlacementWorkload implements Workload {
     private final int blockY;
     private final int blockZ;
     private final Material material;
-    private Player player;
+//    private Player player;
 
     /*
      * This method is called when the workload is executed - specifically when setting blocks.

@@ -1,5 +1,8 @@
 package com.jliii.theatriadungeoncrawler.objects;
 
+import com.jliii.theatriadungeoncrawler.runnables.DistributedFiller;
+import com.jliii.theatriadungeoncrawler.runnables.WorkloadRunnable;
+import com.jliii.theatriadungeoncrawler.templates.DungeonTemplate;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import org.bukkit.Location;
@@ -20,10 +23,12 @@ public class Room2 {
     private Location entryPoint;
     @Getter
     private Location corridorConnectionPoint;
+    private WorkloadRunnable workloadRunnable;
 
-    public Room2(Location cornerA, Location cornerB) {
+    public Room2(Location cornerA, Location cornerB, WorkloadRunnable workloadRunnable) {
         this.cornerA = cornerA;
         this.cornerB = cornerB;
+        this.workloadRunnable = workloadRunnable;
         generateEntryAndCorridorPoints();
     }
 
@@ -54,6 +59,13 @@ public class Room2 {
         int corridorIndex = random.nextInt(wallCenters.size());
         corridorConnectionPoint = wallCenters.get(corridorIndex);
     }
+
+    public void createRoom() {
+        new DistributedFiller(this.workloadRunnable).fillHollowBox(cornerA, cornerB, DungeonTemplate.getRandomTheme());
+    }
+
+    //TODO move the box creation method into here?
+
 
 
 }

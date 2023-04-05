@@ -6,6 +6,7 @@ import com.jliii.theatriadungeoncrawler.managers.DungeonPartyManager;
 import com.jliii.theatriadungeoncrawler.objects.rooms.BossRoom;
 import com.jliii.theatriadungeoncrawler.objects.rooms.MiniBossRoom;
 import com.jliii.theatriadungeoncrawler.objects.rooms.Room;
+import com.jliii.theatriadungeoncrawler.runnables.WorkloadRunnable;
 import com.jliii.theatriadungeoncrawler.tasks.GameRun;
 import com.jliii.theatriadungeoncrawler.util.GeneralUtils;
 import org.bukkit.Bukkit;
@@ -18,6 +19,8 @@ import java.util.stream.Collectors;
 
 public class Dungeon {
 
+    //Dungeons have dungeon phases, which change as players progress
+
     private DungeonMaster dungeonMaster;
     private String key;
     private String worldKey;
@@ -29,13 +32,14 @@ public class Dungeon {
     GameRun game;
     private DungeonPartyManager dungeonPartyManager;
     private HashMap<UUID,String> playerGameMap;
-
+    private WorkloadRunnable workloadRunnable;
     private final List<Location> spawnLocations;
     private List<Location> signLocations;
 
 
-    public Dungeon(Plugin plugin, DungeonMaster dungeonMaster, DungeonPartyManager dungeonPartyManager, String worldKey, String key, List<Room> rooms, List<Location> signLocations, List<Location> spawnLocations) {
+    public Dungeon(Plugin plugin, WorkloadRunnable workloadRunnable, DungeonMaster dungeonMaster, DungeonPartyManager dungeonPartyManager, String worldKey, String key, List<Room> rooms, List<Location> signLocations, List<Location> spawnLocations) {
         this.dungeonMaster = dungeonMaster;
+        this.workloadRunnable = workloadRunnable;
         this.dungeonPartyManager = dungeonPartyManager;
         this.rooms = rooms;
         this.worldKey = worldKey;

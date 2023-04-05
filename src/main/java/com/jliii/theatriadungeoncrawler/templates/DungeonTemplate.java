@@ -39,5 +39,11 @@ public class DungeonTemplate {
             return materials[RANDOM.nextInt(materials.length)];
         }
     }
+
+    public static DungeonType getRandomTheme() {
+        DungeonType[] dungeonTypes = DungeonType.values();
+        int randomIndex = RANDOM.nextInt(dungeonTypes.length);
+        return dungeonTypes[randomIndex];
+    }
 }
 
