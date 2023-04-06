@@ -6,19 +6,18 @@ import lombok.AllArgsConstructor;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
-import org.bukkit.entity.Player;
 import org.bukkit.util.BoundingBox;
 import org.bukkit.util.Vector;
 
 import java.util.*;
 
 @AllArgsConstructor
-public class DistributedFiller {
+public class DistributedWorkload {
 
     private final WorkloadRunnable workloadRunnable;
 //    private Player player;
 
-    public void fillHollowBox(Location cornerA, Location cornerB, DungeonTemplate.DungeonType dungeonType) {
+    public void createRoom(Location cornerA, Location cornerB, DungeonTemplate.DungeonType dungeonType) {
         Preconditions.checkArgument(cornerA.getWorld() == cornerB.getWorld() && cornerA.getWorld() != null);
         BoundingBox box = BoundingBox.of(cornerA.getBlock(), cornerB.getBlock());
         Vector max = box.getMax();
@@ -146,7 +145,7 @@ public class DistributedFiller {
 
         BlockPlacementWorkload blockPlacementWorkload = new BlockPlacementWorkload(world.getUID(), goldBlockLocation.getBlockX(), goldBlockLocation.getBlockY(), goldBlockLocation.getBlockZ(), Material.GOLD_BLOCK);
         this.workloadRunnable.addWorkload(blockPlacementWorkload);
-        fillHollowBox(cornerA, cornerB, dungeonType);
+        createRoom(cornerA, cornerB, dungeonType);
     }
 
     private Location generateGoldBlockLocation(Location cornerB, World world, Random random) {

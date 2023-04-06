@@ -1,6 +1,6 @@
 package com.jliii.theatriadungeoncrawler.objects;
 
-import com.jliii.theatriadungeoncrawler.runnables.DistributedFiller;
+import com.jliii.theatriadungeoncrawler.runnables.DistributedWorkload;
 import com.jliii.theatriadungeoncrawler.runnables.WorkloadRunnable;
 import com.jliii.theatriadungeoncrawler.templates.DungeonTemplate;
 import lombok.AllArgsConstructor;
@@ -61,11 +61,7 @@ public class Room2 {
     }
 
     public void createRoom() {
-        new DistributedFiller(this.workloadRunnable).fillHollowBox(cornerA, cornerB, DungeonTemplate.getRandomTheme());
+        new DistributedWorkload(this.workloadRunnable).createRoom(cornerA, cornerB, DungeonTemplate.getRandomTheme());
     }
-
-    //TODO move the box creation method into here?
-
-
 
 }

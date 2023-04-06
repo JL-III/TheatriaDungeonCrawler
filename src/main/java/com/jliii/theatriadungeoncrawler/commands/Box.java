@@ -2,7 +2,7 @@ package com.jliii.theatriadungeoncrawler.commands;
 
 import com.jliii.theatriadungeoncrawler.TheatriaDungeonCrawler;
 import com.jliii.theatriadungeoncrawler.objects.Room2;
-import com.jliii.theatriadungeoncrawler.runnables.DistributedFiller;
+import com.jliii.theatriadungeoncrawler.runnables.DistributedWorkload;
 import com.jliii.theatriadungeoncrawler.runnables.WorkloadRunnable;
 import com.jliii.theatriadungeoncrawler.templates.DungeonTemplate;
 import org.bukkit.Location;
@@ -83,7 +83,7 @@ public class Box implements CommandExecutor {
             Location cornerA = player.getLocation().add(1, 0, 1); // Add an offset to not spawn the box inside the player
             Location cornerB = cornerA.clone().add(length, height, width);
 
-            new DistributedFiller(this.workloadRunnable, player).fillHollowBox(cornerA, cornerB, dungeonType);
+            new DistributedWorkload(this.workloadRunnable, player).createRoom(cornerA, cornerB, dungeonType);
             Room2 room = new Room2(cornerA, cornerB);
             rooms.add(room);
             player.sendMessage("Created a themed hollow box. Entry point: " + room.getEntryPoint() + ", Corridor connection point: " + room.getCorridorConnectionPoint());
@@ -113,7 +113,7 @@ public class Box implements CommandExecutor {
             Location cornerA = player.getLocation().add(1, 0, 1); // Add an offset to not spawn the box inside the player
             Location cornerB = cornerA.clone().add(length, height, width);
 
-            new DistributedFiller(this.workloadRunnable, player).fillObstacleCourse(cornerA, cornerB, dungeonType);
+            new DistributedWorkload(this.workloadRunnable, player).fillObstacleCourse(cornerA, cornerB, dungeonType);
             Room2 room = new Room2(cornerA, cornerB);
             rooms.add(room);
             player.sendMessage("Created a themed hollow box. Entry point: " + room.getEntryPoint() + ", Corridor connection point: " + room.getCorridorConnectionPoint());
@@ -160,7 +160,7 @@ public class Box implements CommandExecutor {
         }
 
         // Create the corridor
-        new DistributedFiller(this.workloadRunnable, player).fillHollowCorridor(corridorStart, corridorEnd, corridorMaterial);
+        new DistributedWorkload(this.workloadRunnable, player).fillHollowCorridor(corridorStart, corridorEnd, corridorMaterial);
         player.sendMessage("Created a corridor with " + corridorMaterial.name() + " connecting to the room.");
     }
 
