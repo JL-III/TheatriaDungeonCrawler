@@ -1,9 +1,7 @@
 package com.jliii.theatriadungeoncrawler.factories;
 
-import com.jliii.theatriadungeoncrawler.TheatriaDungeonCrawler;
-import com.jliii.theatriadungeoncrawler.objects.Dungeon2;
-import com.jliii.theatriadungeoncrawler.util.TaskScheduler;
-import org.bukkit.Bukkit;
+import com.jliii.theatriadungeoncrawler.objects.Dungeon;
+import com.jliii.theatriadungeoncrawler.util.runnables.TaskScheduler;
 import org.bukkit.scheduler.BukkitTask;
 
 import java.util.ArrayList;
@@ -23,14 +21,14 @@ public class DungeonFactory {
     //should the information be obtainable by the dungeon?
 
     private final TaskScheduler taskScheduler;
-    private List<Dungeon2> dungeons = new ArrayList<>();
+    private List<Dungeon> dungeons = new ArrayList<>();
 
     public DungeonFactory(TaskScheduler taskScheduler) {
         this.taskScheduler = taskScheduler;
     }
 
     public UUID CreateDungeon() {
-        Dungeon2 dungeon = new Dungeon2();
+        Dungeon dungeon = new Dungeon();
         BukkitTask task = taskScheduler.scheduleTask(dungeon.getWorkloadRunnable(), 1, 1);
         dungeon.setTaskId(task.getTaskId());
         dungeons.add(dungeon);

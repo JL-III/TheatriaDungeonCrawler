@@ -1,4 +1,4 @@
-package com.jliii.theatriadungeoncrawler.util;
+package com.jliii.theatriadungeoncrawler.util.runnables;
 
 
 import org.bukkit.Bukkit;

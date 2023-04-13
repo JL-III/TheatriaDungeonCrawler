@@ -12,19 +12,19 @@ public class DungeonPhase {
     //Or will store the rooms themselves with their properties. Not certain if we want to predetermine the rooms all at phase creation or one room after another
     //will contain a state that will be used to determine if the phase is complete
 
-    private final List<Room2> rooms;
+    private final List<Room> rooms;
     private final SafeRoom safeRoom;
     private final UUID phaseUUID;
     private boolean isComplete;
 
-    public DungeonPhase(List<Room2> rooms, SafeRoom safeRoom) {
+    public DungeonPhase(List<Room> rooms, SafeRoom safeRoom) {
         this.rooms = rooms;
         this.safeRoom = safeRoom;
         this.isComplete = false;
         phaseUUID = UUID.randomUUID();
     }
 
-    public List<Room2> getRooms() {
+    public List<Room> getRooms() {
         return rooms;
     }
 

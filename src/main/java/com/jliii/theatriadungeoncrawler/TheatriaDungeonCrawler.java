@@ -3,12 +3,9 @@ package com.jliii.theatriadungeoncrawler;
 import com.jliii.theatriadungeoncrawler.commands.AdminCommands;
 import com.jliii.theatriadungeoncrawler.commands.Box;
 import com.jliii.theatriadungeoncrawler.factories.DungeonFactory;
-import com.jliii.theatriadungeoncrawler.listeners.PlayerListener;
-import com.jliii.theatriadungeoncrawler.listeners.Signs;
-import com.jliii.theatriadungeoncrawler.managers.DungeonMaster;
-import com.jliii.theatriadungeoncrawler.runnables.WorkloadRunnable;
-import com.jliii.theatriadungeoncrawler.util.BukkitTaskScheduler;
-import com.jliii.theatriadungeoncrawler.util.TaskScheduler;
+import com.jliii.theatriadungeoncrawler.util.runnables.WorkloadRunnable;
+import com.jliii.theatriadungeoncrawler.util.runnables.BukkitTaskScheduler;
+import com.jliii.theatriadungeoncrawler.util.runnables.TaskScheduler;
 import org.bukkit.Bukkit;
 import org.bukkit.plugin.java.JavaPlugin;
 

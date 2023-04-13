@@ -1,4 +1,4 @@
-package com.jliii.theatriadungeoncrawler.runnables;
+package com.jliii.theatriadungeoncrawler.util.runnables;
 
 import com.google.common.base.Preconditions;
 import com.jliii.theatriadungeoncrawler.templates.DungeonTemplate;

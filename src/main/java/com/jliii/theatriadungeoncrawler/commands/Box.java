@@ -1,9 +1,9 @@
 package com.jliii.theatriadungeoncrawler.commands;
 
 import com.jliii.theatriadungeoncrawler.TheatriaDungeonCrawler;
-import com.jliii.theatriadungeoncrawler.objects.Room2;
-import com.jliii.theatriadungeoncrawler.runnables.DistributedWorkload;
-import com.jliii.theatriadungeoncrawler.runnables.WorkloadRunnable;
+import com.jliii.theatriadungeoncrawler.objects.Room;
+import com.jliii.theatriadungeoncrawler.util.runnables.DistributedWorkload;
+import com.jliii.theatriadungeoncrawler.util.runnables.WorkloadRunnable;
 import com.jliii.theatriadungeoncrawler.templates.DungeonTemplate;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -20,7 +20,7 @@ public class Box implements CommandExecutor {
 
     private TheatriaDungeonCrawler plugin;
     private WorkloadRunnable workloadRunnable;
-    private List<Room2> rooms = new ArrayList<>();
+    private List<Room> rooms = new ArrayList<>();
 
     public Box(TheatriaDungeonCrawler plugin, WorkloadRunnable workloadRunnable) {
         this.plugin = plugin;
@@ -83,10 +83,10 @@ public class Box implements CommandExecutor {
             Location cornerA = player.getLocation().add(1, 0, 1); // Add an offset to not spawn the box inside the player
             Location cornerB = cornerA.clone().add(length, height, width);
 
-            new DistributedWorkload(this.workloadRunnable, player).createRoom(cornerA, cornerB, dungeonType);
-            Room2 room = new Room2(cornerA, cornerB);
-            rooms.add(room);
-            player.sendMessage("Created a themed hollow box. Entry point: " + room.getEntryPoint() + ", Corridor connection point: " + room.getCorridorConnectionPoint());
+//            new DistributedWorkload(this.workloadRunnable).createRoom(cornerA, cornerB, dungeonType);
+//            Room2 room = new Room2(cornerA, cornerB, workloadRunnable);
+//            rooms.add(room);
+//            player.sendMessage("Created a themed hollow box. Entry point: " + room.getEntryPoint() + ", Corridor connection point: " + room.getCorridorConnectionPoint());
             return true;
         } else {
             sender.sendMessage("Invalid argument. Usage: /box create [arguments]");
@@ -113,8 +113,8 @@ public class Box implements CommandExecutor {
             Location cornerA = player.getLocation().add(1, 0, 1); // Add an offset to not spawn the box inside the player
             Location cornerB = cornerA.clone().add(length, height, width);
 
-            new DistributedWorkload(this.workloadRunnable, player).fillObstacleCourse(cornerA, cornerB, dungeonType);
-            Room2 room = new Room2(cornerA, cornerB);
+            new DistributedWorkload(this.workloadRunnable).fillObstacleCourse(cornerA, cornerB, dungeonType);
+            Room room = new Room(cornerA, cornerB);
             rooms.add(room);
             player.sendMessage("Created a themed hollow box. Entry point: " + room.getEntryPoint() + ", Corridor connection point: " + room.getCorridorConnectionPoint());
             return true;
@@ -128,7 +128,7 @@ public class Box implements CommandExecutor {
 
     private void createCorridor(Player player) {
         Location playerLocation = player.getLocation();
-        Room2 room = findRoomByPlayerLocation(playerLocation);
+        Room room = findRoomByPlayerLocation(playerLocation);
 
         if (room == null) {
             player.sendMessage("You are not standing in a valid room.");
@@ -165,13 +165,13 @@ public class Box implements CommandExecutor {
     }
 
 
-    private Room2 findRoomByPlayerLocation(Location playerLocation) {
+    private Room findRoomByPlayerLocation(Location playerLocation) {
         // This method should search for a room that contains the player's location
         // You should maintain a list of Room2 objects and check if any of them contain the player's location
         // You can compare the coordinates of the player's location to the coordinates of the room's corners
 
         // For example:
-        for (Room2 room : rooms) {
+        for (Room room : rooms) {
             if (isLocationInsideRoom(playerLocation, room)) {
                 return room;
             }
@@ -180,7 +180,7 @@ public class Box implements CommandExecutor {
         return null;
     }
 
-    private boolean isLocationInsideRoom(Location location, Room2 room) {
+    private boolean isLocationInsideRoom(Location location, Room room) {
         Location cornerA = room.getCornerA();
         Location cornerB = room.getCornerB();
 

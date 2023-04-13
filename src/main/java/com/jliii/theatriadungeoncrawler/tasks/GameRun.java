@@ -1,7 +1,6 @@
 package com.jliii.theatriadungeoncrawler.tasks;
 
 import com.jliii.theatriadungeoncrawler.enums.State;
-import com.jliii.theatriadungeoncrawler.objects.Dungeon;
 import com.jliii.theatriadungeoncrawler.objects.rooms.Room;
 import org.bukkit.Bukkit;
 import org.bukkit.entity.Player;

@@ -1,168 +1,55 @@
 package com.jliii.theatriadungeoncrawler.objects;
 
-import com.jliii.theatriadungeoncrawler.enums.State;
-import com.jliii.theatriadungeoncrawler.managers.DungeonMaster;
-import com.jliii.theatriadungeoncrawler.managers.DungeonPartyManager;
-import com.jliii.theatriadungeoncrawler.objects.rooms.BossRoom;
-import com.jliii.theatriadungeoncrawler.objects.rooms.MiniBossRoom;
-import com.jliii.theatriadungeoncrawler.objects.rooms.Room;
-import com.jliii.theatriadungeoncrawler.runnables.WorkloadRunnable;
-import com.jliii.theatriadungeoncrawler.tasks.GameRun;
-import com.jliii.theatriadungeoncrawler.util.GeneralUtils;
+import com.jliii.theatriadungeoncrawler.factories.RoomFactory;
+import com.jliii.theatriadungeoncrawler.util.runnables.WorkloadRunnable;
 import org.bukkit.Bukkit;
-import org.bukkit.Location;
-import org.bukkit.entity.Player;
-import org.bukkit.plugin.Plugin;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 public class Dungeon {
 
-    //Dungeons have dungeon phases, which change as players progress
-
-    private DungeonMaster dungeonMaster;
-    private String key;
-    private String worldKey;
-    private boolean isComplete;
-    List<Room> rooms;
-    List<MiniBossRoom> miniBossRooms;
-    List<BossRoom> bossRooms;
-    State state = State.OFF;
-    GameRun game;
-    private DungeonPartyManager dungeonPartyManager;
-    private HashMap<UUID,String> playerGameMap;
-    private WorkloadRunnable workloadRunnable;
-    private final List<Location> spawnLocations;
-    private List<Location> signLocations;
+    private final UUID dungeonUUID = UUID.randomUUID();
+    private final WorkloadRunnable workloadRunnable = new WorkloadRunnable();
+    private int taskId;
+    private List<UUID> playersInDungeon = new ArrayList<>();
+    private RoomFactory roomFactory = new RoomFactory(workloadRunnable);
 
 
-    public Dungeon(Plugin plugin, WorkloadRunnable workloadRunnable, DungeonMaster dungeonMaster, DungeonPartyManager dungeonPartyManager, String worldKey, String key, List<Room> rooms, List<Location> signLocations, List<Location> spawnLocations) {
-        this.dungeonMaster = dungeonMaster;
-        this.workloadRunnable = workloadRunnable;
-        this.dungeonPartyManager = dungeonPartyManager;
-        this.rooms = rooms;
-        this.worldKey = worldKey;
-        this.signLocations = signLocations;
-        this.spawnLocations = spawnLocations;
-        this.playerGameMap = dungeonPartyManager.getPlayerGameMap();
-        this.key = key;
-        this.miniBossRooms = getMiniBossRooms();
-        this.bossRooms = getBossRooms();
-        game = new GameRun(plugin, this);
+    public Dungeon() {
+
     }
 
-    public void setGameState(State state) {
-        if ((this.state.order > state.order) && state != State.OFF) return;
-        if (this.state == state) return;
-        this.state = state;
-        switch (state) {
-            case OFF:
-                //give access to dungeon master to update signs on state changes.
-                dungeonMaster.updateSigns();
-                reset();
-                break;
-            case LOBBY:
-                break;
-            case STARTING:
-                break;
-            case ACTIVE:
-                setup();
-                game.Run();
-                break;
-            case WON:
-                break;
-            default:
-                break;
+    public void addPlayer(UUID uuid) {
+        playersInDungeon.add(uuid);
+    }
+
+    public List<UUID> removePlayer(UUID uuid) {
+        if (uuid == null) {
+            Bukkit.getLogger().warning("UUID is null in Dungeon.removePlayer");
+            return new ArrayList<>(playersInDungeon);
         }
-    }
 
-    public void reset() {
-        for (Room room : getRooms()) {
-            room.reset();
-        }
-    }
-
-    public void setup() {
-        for (UUID uuid : playerGameMap.keySet()) {
-            if (playerGameMap.get(uuid).equalsIgnoreCase(key)) {
-                if (Bukkit.getPlayer(uuid) != null) {
-                    Bukkit.getPlayer(uuid).teleport(spawnLocations.get(GeneralUtils.getRandomNumber(0, spawnLocations.size() - 1)));
-                }
-            }
-        }
-    }
-
-    public List<Player> getPlayersFromUUID(List<Map.Entry<UUID, String>> playerGameMap) {
-        return playerGameMap.stream().map(x -> Bukkit.getPlayer(x.getKey())).collect(Collectors.toList());
-    }
-
-    public List<Map.Entry<UUID, String>> getAllPlayersInGame() {
-        return playerGameMap.entrySet().stream().filter(x -> x.getValue().equalsIgnoreCase(key)).collect(Collectors.toList());
-    }
-
-    public List<BossRoom> getBossRooms() {
-        return rooms.stream()
-                .filter(room -> room instanceof BossRoom)
-                .map(room -> (BossRoom) room)
+        return playersInDungeon.stream()
+                .filter(playerUUID -> !playerUUID.equals(uuid))
                 .collect(Collectors.toList());
     }
 
-    public List<MiniBossRoom> getMiniBossRooms() {
-        return rooms.stream()
-                .filter(room -> room instanceof MiniBossRoom)
-                .map(room -> (MiniBossRoom) room)
-                .collect(Collectors.toList());
+    public UUID getUUID() {
+        return dungeonUUID;
     }
 
-    public String getKey() {
-        return key;
+    public WorkloadRunnable getWorkloadRunnable() {
+        return workloadRunnable;
     }
 
-    public List<Room> getRooms() {
-        return this.rooms;
+    public void setTaskId(int taskId) {
+        this.taskId = taskId;
     }
 
-    public State getGameState() {
-        return state;
+    public int getTaskId() {
+        return taskId;
     }
-
-    public void addToPlayersInGame(Player playerToAdd) {
-        playerGameMap.put(playerToAdd.getUniqueId(), this.key);
-    }
-
-    public List<Location> getSpawnLocations() {
-        return spawnLocations;
-    }
-
-    public List<Location> getSignLocations() {
-        return signLocations;
-    }
-
-    public void setSignLocations(List<Location> signLocations) {
-        this.signLocations = signLocations;
-    }
-
-    public String getWorldKey() {
-        return worldKey;
-    }
-
-    public GameRun getGame() {
-        return game;
-    }
-
-    public boolean isComplete() { return isComplete; }
-
-    public void setComplete(boolean complete) {
-        isComplete = complete;
-    }
-
-    public DungeonPartyManager getDungeonPartyManager() {
-        return dungeonPartyManager;
-    }
-
-    public void setDungeonPartyManager(DungeonPartyManager dungeonPartyManager) {
-        this.dungeonPartyManager = dungeonPartyManager;
-    }
-
 }

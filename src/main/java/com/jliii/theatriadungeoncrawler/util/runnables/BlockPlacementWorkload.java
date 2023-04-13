@@ -1,12 +1,10 @@
-package com.jliii.theatriadungeoncrawler.runnables;
+package com.jliii.theatriadungeoncrawler.util.runnables;
 
 import com.google.common.base.Preconditions;
 import lombok.AllArgsConstructor;
 import org.bukkit.Bukkit;
-import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
-import org.bukkit.entity.Player;
 
 import java.util.UUID;
 
