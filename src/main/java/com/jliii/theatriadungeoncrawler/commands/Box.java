@@ -114,7 +114,7 @@ public class Box implements CommandExecutor {
             Location cornerB = cornerA.clone().add(length, height, width);
 
             new DistributedWorkload(this.workloadRunnable).fillObstacleCourse(cornerA, cornerB, dungeonType);
-            Room room = new Room(cornerA, cornerB);
+            Room room = new Room(cornerA, cornerB, workloadRunnable);
             rooms.add(room);
             player.sendMessage("Created a themed hollow box. Entry point: " + room.getEntryPoint() + ", Corridor connection point: " + room.getCorridorConnectionPoint());
             return true;
@@ -160,7 +160,7 @@ public class Box implements CommandExecutor {
         }
 
         // Create the corridor
-        new DistributedWorkload(this.workloadRunnable, player).fillHollowCorridor(corridorStart, corridorEnd, corridorMaterial);
+        new DistributedWorkload(this.workloadRunnable).fillHollowCorridor(corridorStart, corridorEnd, corridorMaterial);
         player.sendMessage("Created a corridor with " + corridorMaterial.name() + " connecting to the room.");
     }
 

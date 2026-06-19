@@ -19,16 +19,12 @@ public final class TheatriaDungeonCrawler extends JavaPlugin {
     @Override
     public void onEnable() {
         // Plugin startup logic
-        //TODO remove the workload runnable that is here
         saveDefaultConfig();
         TaskScheduler taskScheduler = new BukkitTaskScheduler(this);
         DungeonFactory dungeonFactory = new DungeonFactory(taskScheduler);
         workloadRunnable.setManualExecution(true);
         Bukkit.getScheduler().runTaskTimer(this, this.workloadRunnable, 1, 1);
-        DungeonMaster dungeonMaster = new DungeonMaster(this);
-        Bukkit.getPluginManager().registerEvents(new PlayerListener(dungeonMaster), this);
-        Bukkit.getPluginManager().registerEvents(new Signs(this, dungeonMaster), this);
-        Objects.requireNonNull(Bukkit.getPluginCommand("dungeons")).setExecutor(new AdminCommands(this, dungeonMaster));
+        Objects.requireNonNull(Bukkit.getPluginCommand("dungeons")).setExecutor(new AdminCommands(this));
         Objects.requireNonNull(Bukkit.getPluginCommand("box")).setExecutor(new Box(this, workloadRunnable));
     }
 
