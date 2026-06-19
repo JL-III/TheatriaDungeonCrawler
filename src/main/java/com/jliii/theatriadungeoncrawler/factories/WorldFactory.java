@@ -6,6 +6,9 @@ import org.bukkit.GameRule;
 import org.bukkit.World;
 import org.bukkit.WorldCreator;
 
+import java.io.File;
+import java.util.UUID;
+
 /**
  * Creates and loads the void world that dungeons are generated into.
  *
@@ -21,7 +24,65 @@ public final class WorldFactory {
 
     public static final String DUNGEON_WORLD_NAME = "Labyrinth";
 
+    /** Prefix for per-instance dungeon worlds, used to recognise disposable worlds. */
+    public static final String INSTANCE_WORLD_PREFIX = "dungeon_";
+
     private WorldFactory() {
+    }
+
+    /**
+     * Creates a brand-new, uniquely-named void world for a single dungeon
+     * instance. Each call produces a distinct world that can be disposed of
+     * independently via {@link #disposeWorld(World)}.
+     *
+     * @return the new world, or {@code null} if creation failed
+     */
+    public static World createInstanceWorld() {
+        String name = INSTANCE_WORLD_PREFIX + UUID.randomUUID().toString().substring(0, 8);
+        World world = new WorldCreator(name)
+                .environment(World.Environment.NORMAL)
+                .generator(new VoidChunkGenerator())
+                .generateStructures(false)
+                .createWorld();
+        if (world != null) {
+            applyDungeonGameRules(world);
+        }
+        return world;
+    }
+
+    /**
+     * Unloads an instance world and deletes its folder from disk. Only worlds
+     * created by {@link #createInstanceWorld()} (recognised by their name
+     * prefix) are deleted, to guard against ever removing a real server world.
+     *
+     * @return {@code true} if the world was unloaded (and its folder deleted)
+     */
+    public static boolean disposeWorld(World world) {
+        if (world == null || !world.getName().startsWith(INSTANCE_WORLD_PREFIX)) {
+            return false;
+        }
+        File folder = world.getWorldFolder();
+        if (!Bukkit.unloadWorld(world, false)) {
+            return false;
+        }
+        deleteRecursively(folder);
+        return true;
+    }
+
+    private static void deleteRecursively(File file) {
+        if (file == null || !file.exists()) {
+            return;
+        }
+        File[] children = file.listFiles();
+        if (children != null) {
+            for (File child : children) {
+                deleteRecursively(child);
+            }
+        }
+        // Best-effort: a leftover file should not abort instance teardown.
+        if (!file.delete()) {
+            file.deleteOnExit();
+        }
     }
 
     /**

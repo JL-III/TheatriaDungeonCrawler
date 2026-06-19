@@ -185,7 +185,7 @@ public class Box implements CommandExecutor {
         }
 
         DungeonLayoutGenerator generator = new DungeonLayoutGenerator(world, workloadRunnable);
-        Location spawn = generator.generate(origin, roomCount, theme, new Random());
+        Location spawn = generator.generate(origin, roomCount, theme, new Random()).getSpawn();
 
         // Build the queued blocks automatically (rather than waiting for /box play).
         workloadRunnable.setManualExecution(false);

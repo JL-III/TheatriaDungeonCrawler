@@ -1,55 +1,117 @@
 package com.jliii.theatriadungeoncrawler.objects;
 
-import com.jliii.theatriadungeoncrawler.factories.RoomFactory;
+import com.jliii.theatriadungeoncrawler.enums.State;
+import com.jliii.theatriadungeoncrawler.templates.DungeonTemplate;
 import com.jliii.theatriadungeoncrawler.util.runnables.WorkloadRunnable;
-import org.bukkit.Bukkit;
+import org.bukkit.Location;
+import org.bukkit.World;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
+/**
+ * A single, isolated dungeon instance: its own void world, generated layout,
+ * the players inside it, and the lifecycle {@link State} it is in.
+ *
+ * <p>Each instance owns a {@link WorkloadRunnable} so its world can build
+ * independently of every other instance, and remembers where each player came
+ * from so they can be returned when the instance is disposed.</p>
+ */
 public class Dungeon {
 
     private final UUID dungeonUUID = UUID.randomUUID();
     private final WorkloadRunnable workloadRunnable = new WorkloadRunnable();
-    private int taskId;
-    private List<UUID> playersInDungeon = new ArrayList<>();
-    private RoomFactory roomFactory = new RoomFactory(workloadRunnable);
+    private final List<UUID> players = new ArrayList<>();
+    private final Map<UUID, Location> returnLocations = new HashMap<>();
 
+    private final World world;
+    private final int roomCount;
+    private final DungeonTemplate.DungeonType theme;
 
-    public Dungeon() {
+    private DungeonLayout layout;
+    private State state = State.STARTING;
+    private int buildTaskId = -1;
 
+    public Dungeon(World world, int roomCount, DungeonTemplate.DungeonType theme) {
+        this.world = world;
+        this.roomCount = roomCount;
+        this.theme = theme;
     }
 
-    public void addPlayer(UUID uuid) {
-        playersInDungeon.add(uuid);
-    }
-
-    public List<UUID> removePlayer(UUID uuid) {
-        if (uuid == null) {
-            Bukkit.getLogger().warning("UUID is null in Dungeon.removePlayer");
-            return new ArrayList<>(playersInDungeon);
+    public void addPlayer(UUID uuid, Location returnLocation) {
+        if (!players.contains(uuid)) {
+            players.add(uuid);
         }
+        returnLocations.put(uuid, returnLocation);
+    }
 
-        return playersInDungeon.stream()
-                .filter(playerUUID -> !playerUUID.equals(uuid))
-                .collect(Collectors.toList());
+    /**
+     * Removes a player from this instance.
+     *
+     * @return the location the player should be returned to, or {@code null}
+     *         if they were not in this instance
+     */
+    public Location removePlayer(UUID uuid) {
+        players.remove(uuid);
+        return returnLocations.remove(uuid);
+    }
+
+    public List<UUID> getPlayers() {
+        return new ArrayList<>(players);
+    }
+
+    public boolean isEmpty() {
+        return players.isEmpty();
+    }
+
+    public Location getReturnLocation(UUID uuid) {
+        return returnLocations.get(uuid);
     }
 
     public UUID getUUID() {
         return dungeonUUID;
     }
 
+    public World getWorld() {
+        return world;
+    }
+
+    public int getRoomCount() {
+        return roomCount;
+    }
+
+    public DungeonTemplate.DungeonType getTheme() {
+        return theme;
+    }
+
     public WorkloadRunnable getWorkloadRunnable() {
         return workloadRunnable;
     }
 
-    public void setTaskId(int taskId) {
-        this.taskId = taskId;
+    public DungeonLayout getLayout() {
+        return layout;
     }
 
-    public int getTaskId() {
-        return taskId;
+    public void setLayout(DungeonLayout layout) {
+        this.layout = layout;
+    }
+
+    public State getState() {
+        return state;
+    }
+
+    public void setState(State state) {
+        this.state = state;
+    }
+
+    public int getBuildTaskId() {
+        return buildTaskId;
+    }
+
+    public void setBuildTaskId(int buildTaskId) {
+        this.buildTaskId = buildTaskId;
     }
 }

@@ -1,7 +1,9 @@
 package com.jliii.theatriadungeoncrawler.factories;
 
+import com.jliii.theatriadungeoncrawler.objects.DungeonLayout;
 import com.jliii.theatriadungeoncrawler.templates.DungeonTemplate;
 import com.jliii.theatriadungeoncrawler.util.Coord;
+import com.jliii.theatriadungeoncrawler.util.runnables.BlockPlacementWorkload;
 import com.jliii.theatriadungeoncrawler.util.runnables.DistributedWorkload;
 import com.jliii.theatriadungeoncrawler.util.runnables.WorkloadRunnable;
 import org.bukkit.Location;
@@ -46,6 +48,8 @@ public class DungeonLayoutGenerator {
     private static final int CELL_PITCH = ROOM_FOOTPRINT + CORRIDOR_GAP;
 
     private static final Material CORRIDOR_MATERIAL = Material.STONE_BRICKS;
+    /** Block placed on the exit room floor to mark the dungeon's goal. */
+    private static final Material GOAL_MARKER = Material.EMERALD_BLOCK;
 
     private final World world;
     private final WorkloadRunnable workloadRunnable;
@@ -66,9 +70,9 @@ public class DungeonLayoutGenerator {
      * @param theme     the theme to build every room with, or {@code null} to
      *                  pick a fresh random theme per room
      * @param random    randomness source driving layout and themes
-     * @return a safe spawn location standing on the floor of the start room
+     * @return the spawn point and exit-room region of the generated dungeon
      */
-    public Location generate(Location origin, int roomCount, DungeonTemplate.DungeonType theme, Random random) {
+    public DungeonLayout generate(Location origin, int roomCount, DungeonTemplate.DungeonType theme, Random random) {
         int originX = origin.getBlockX();
         int originY = origin.getBlockY();
         int originZ = origin.getBlockZ();
@@ -90,10 +94,53 @@ public class DungeonLayoutGenerator {
             carveDoorways(edge[0], edge[1], originX, originY, originZ);
         }
 
+        // The exit is the room farthest from the start, marked with a goal block.
+        Coord exitCell = farthestCell(rooms.keySet());
+        markGoal(exitCell, originX, originY, originZ);
+
         // Spawn standing on the floor in the centre of the start room.
         double spawnX = originX + ROOM_FOOTPRINT / 2.0;
         double spawnZ = originZ + ROOM_FOOTPRINT / 2.0;
-        return new Location(world, spawnX, originY + 1, spawnZ);
+        Location spawn = new Location(world, spawnX, originY + 1, spawnZ);
+
+        return new DungeonLayout(spawn, exitInteriorMin(exitCell, originX, originY, originZ),
+                exitInteriorMax(exitCell, originX, originY, originZ));
+    }
+
+    /** Returns the placed cell with the greatest grid distance from the start. */
+    private Coord farthestCell(Set<Coord> cells) {
+        Coord best = new Coord(0, 0);
+        int bestDistance = -1;
+        for (Coord cell : cells) {
+            int distance = Math.abs(cell.getX()) + Math.abs(cell.getZ());
+            if (distance > bestDistance) {
+                bestDistance = distance;
+                best = cell;
+            }
+        }
+        return best;
+    }
+
+    private void markGoal(Coord cell, int originX, int originY, int originZ) {
+        int cx = originX + cell.getX() * CELL_PITCH + ROOM_FOOTPRINT / 2;
+        int cz = originZ + cell.getZ() * CELL_PITCH + ROOM_FOOTPRINT / 2;
+        // Enqueued after the room floor so it overwrites the centre floor block.
+        workloadRunnable.addWorkload(new BlockPlacementWorkload(world.getUID(), cx, originY, cz, GOAL_MARKER));
+    }
+
+    private Location exitInteriorMin(Coord cell, int originX, int originY, int originZ) {
+        int minX = originX + cell.getX() * CELL_PITCH;
+        int minZ = originZ + cell.getZ() * CELL_PITCH;
+        return new Location(world, minX + 1, originY + 1, minZ + 1);
+    }
+
+    private Location exitInteriorMax(Coord cell, int originX, int originY, int originZ) {
+        int minX = originX + cell.getX() * CELL_PITCH;
+        int minZ = originZ + cell.getZ() * CELL_PITCH;
+        return new Location(world,
+                minX + ROOM_FOOTPRINT - 2,
+                originY + ROOM_HEIGHT - 2,
+                minZ + ROOM_FOOTPRINT - 2);
     }
 
     /**
