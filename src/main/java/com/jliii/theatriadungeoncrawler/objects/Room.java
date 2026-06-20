@@ -1,8 +1,6 @@
 package com.jliii.theatriadungeoncrawler.objects;
 
-import com.jliii.theatriadungeoncrawler.util.runnables.WorkloadRunnable;
-import lombok.AllArgsConstructor;
-import lombok.Getter;
+import com.jliii.theatriadungeoncrawler.util.runnables.WorkloadQueue;
 import org.bukkit.Location;
 import org.bukkit.World;
 
@@ -10,23 +8,18 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 
-@AllArgsConstructor
 public class Room {
 
-    @Getter
     private final Location cornerA;
-    @Getter
     private final Location cornerB;
-    @Getter
     private Location entryPoint;
-    @Getter
     private Location corridorConnectionPoint;
-    private WorkloadRunnable workloadRunnable;
+    private WorkloadQueue workloadQueue;
 
-    public Room(Location cornerA, Location cornerB, WorkloadRunnable workloadRunnable) {
+    public Room(Location cornerA, Location cornerB, WorkloadQueue workloadQueue) {
         this.cornerA = cornerA;
         this.cornerB = cornerB;
-        this.workloadRunnable = workloadRunnable;
+        this.workloadQueue = workloadQueue;
         generateEntryAndCorridorPoints();
     }
 
@@ -56,6 +49,22 @@ public class Room {
         // Randomly choose the corridor connection point from the remaining walls
         int corridorIndex = random.nextInt(wallCenters.size());
         corridorConnectionPoint = wallCenters.get(corridorIndex);
+    }
+
+    public Location getCornerA() {
+        return cornerA;
+    }
+
+    public Location getCornerB() {
+        return cornerB;
+    }
+
+    public Location getEntryPoint() {
+        return entryPoint;
+    }
+
+    public Location getCorridorConnectionPoint() {
+        return corridorConnectionPoint;
     }
 
 }

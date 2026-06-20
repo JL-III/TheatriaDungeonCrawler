@@ -1,7 +1,5 @@
 package com.jliii.theatriadungeoncrawler.objects;
 
-import com.jliii.theatriadungeoncrawler.objects.rooms.Room;
-
 import java.util.List;
 import java.util.UUID;
 

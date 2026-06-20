@@ -3,9 +3,10 @@ package com.jliii.theatriadungeoncrawler.util.runnables;
 import java.util.ArrayDeque;
 import java.util.Deque;
 
-public class WorkloadRunnable implements Runnable {
+public class WorkloadQueue implements Runnable {
 
-    private static final double MAX_MILLIS_PER_TICK = 1;
+    /** Max wall-clock spent placing blocks per tick, per instance queue. */
+    private static final double MAX_MILLIS_PER_TICK = 0.5;
     private static final int MAX_NANOS_PER_TICK = (int) (MAX_MILLIS_PER_TICK * 1E6);
 
     private final Deque<Workload> workloadDeque = new ArrayDeque<>();
@@ -19,6 +20,11 @@ public class WorkloadRunnable implements Runnable {
         this.manualExecution = manualExecution;
     }
 
+    /** @return {@code true} if there is queued work still to process. */
+    public boolean isBusy() {
+        return !this.workloadDeque.isEmpty();
+    }
+
     @Override
     public void run() {
         if (manualExecution) {
@@ -29,15 +35,19 @@ public class WorkloadRunnable implements Runnable {
         Workload nextLoad;
 
         while (System.nanoTime() <= stopTime && (nextLoad = this.workloadDeque.poll()) != null) {
-            nextLoad.compute();
+            // An incomplete workload (e.g. a region filled in batches) resumes
+            // at the front of the queue, preserving order for what follows it.
+            if (!nextLoad.compute()) {
+                this.workloadDeque.addFirst(nextLoad);
+            }
         }
 
     }
 
     public void executeNextWorkload() {
         Workload nextLoad = this.workloadDeque.poll();
-        if (nextLoad != null) {
-            nextLoad.compute();
+        if (nextLoad != null && !nextLoad.compute()) {
+            this.workloadDeque.addFirst(nextLoad);
         }
     }
 }

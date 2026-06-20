@@ -2,7 +2,6 @@ package com.jliii.theatriadungeoncrawler.util.runnables;
 
 import com.google.common.base.Preconditions;
 import com.jliii.theatriadungeoncrawler.templates.DungeonTemplate;
-import lombok.AllArgsConstructor;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
@@ -11,35 +10,19 @@ import org.bukkit.util.Vector;
 
 import java.util.*;
 
-@AllArgsConstructor
-public class DistributedWorkload {
+public class DungeonBuilder {
 
-    private final WorkloadRunnable workloadRunnable;
+    private final WorkloadQueue workloadQueue;
 //    private Player player;
+
+    public DungeonBuilder(WorkloadQueue workloadQueue) {
+        this.workloadQueue = workloadQueue;
+    }
 
     public void createRoom(Location cornerA, Location cornerB, DungeonTemplate.DungeonType dungeonType) {
         Preconditions.checkArgument(cornerA.getWorld() == cornerB.getWorld() && cornerA.getWorld() != null);
-        BoundingBox box = BoundingBox.of(cornerA.getBlock(), cornerB.getBlock());
-        Vector max = box.getMax();
-        Vector min = box.getMin();
-
-        World world = cornerA.getWorld();
-        for (int x = min.getBlockX(); x <= max.getBlockX(); x++) {
-            for (int y = min.getBlockY(); y <= max.getBlockY(); y++) {
-                for (int z = min.getBlockZ(); z <= max.getBlockZ(); z++) {
-                    boolean isEdge =
-                            x == min.getBlockX() || x == max.getBlockX()
-                                    || y == min.getBlockY() || y == max.getBlockY()
-                                    || z == min.getBlockZ() || z == max.getBlockZ();
-
-                    if (isEdge) {
-                        Material material = DungeonTemplate.getRandomMaterial(dungeonType);
-                        BlockPlacementWorkload blockPlacementWorkload = new BlockPlacementWorkload(world.getUID(), x, y, z, material);
-                        this.workloadRunnable.addWorkload(blockPlacementWorkload);
-                    }
-                }
-            }
-        }
+        this.workloadQueue.addWorkload(new BatchedRegionWorkload(
+                cornerA.getWorld().getUID(), cornerA, cornerB, true, null, dungeonType));
     }
 
 
@@ -63,7 +46,7 @@ public class DistributedWorkload {
 
                     if (isEdge && !isOpenEnd) {
                         BlockPlacementWorkload blockPlacementWorkload = new BlockPlacementWorkload(world.getUID(), x, y, z, material);
-                        this.workloadRunnable.addWorkload(blockPlacementWorkload);
+                        this.workloadQueue.addWorkload(blockPlacementWorkload);
                     }
                 }
             }
@@ -72,44 +55,14 @@ public class DistributedWorkload {
 
     public void fillSolidBox(Location cornerA, Location cornerB, Material material) {
         Preconditions.checkArgument(cornerA.getWorld() == cornerB.getWorld() && cornerA.getWorld() != null);
-        BoundingBox box = BoundingBox.of(cornerA.getBlock(), cornerB.getBlock());
-        Vector max = box.getMax();
-        Vector min = box.getMin();
-
-        World world = cornerA.getWorld();
-        for (int x = min.getBlockX(); x <= max.getBlockX(); x++) {
-            for (int y = min.getBlockY(); y <= max.getBlockY(); y++) {
-                for (int z = min.getBlockZ(); z <= max.getBlockZ(); z++) {
-                    BlockPlacementWorkload blockPlacementWorkload = new BlockPlacementWorkload(world.getUID(), x, y, z, material);
-                    this.workloadRunnable.addWorkload(blockPlacementWorkload);
-                }
-            }
-        }
+        this.workloadQueue.addWorkload(new BatchedRegionWorkload(
+                cornerA.getWorld().getUID(), cornerA, cornerB, false, material, null));
     }
 
     public void fillBox(Location cornerA, Location cornerB, DungeonTemplate.DungeonType dungeonType, boolean isSolid) {
         Preconditions.checkArgument(cornerA.getWorld() == cornerB.getWorld() && cornerA.getWorld() != null);
-        BoundingBox box = BoundingBox.of(cornerA.getBlock(), cornerB.getBlock());
-        Vector max = box.getMax();
-        Vector min = box.getMin();
-
-        World world = cornerA.getWorld();
-        for (int x = min.getBlockX(); x <= max.getBlockX(); x++) {
-            for (int y = min.getBlockY(); y <= max.getBlockY(); y++) {
-                for (int z = min.getBlockZ(); z <= max.getBlockZ(); z++) {
-                    boolean isEdge =
-                            x == min.getBlockX() || x == max.getBlockX()
-                                    || y == min.getBlockY() || y == max.getBlockY()
-                                    || z == min.getBlockZ() || z == max.getBlockZ();
-
-                    if (isSolid || isEdge) {
-                        Material material = DungeonTemplate.getRandomMaterial(dungeonType);
-                        BlockPlacementWorkload blockPlacementWorkload = new BlockPlacementWorkload(world.getUID(), x, y, z, material);
-                        this.workloadRunnable.addWorkload(blockPlacementWorkload);
-                    }
-                }
-            }
-        }
+        this.workloadQueue.addWorkload(new BatchedRegionWorkload(
+                cornerA.getWorld().getUID(), cornerA, cornerB, !isSolid, null, dungeonType));
     }
 
     public void fillObstacleCourse(Location cornerA, Location cornerB, DungeonTemplate.DungeonType dungeonType) {
@@ -144,7 +97,7 @@ public class DistributedWorkload {
         }
 
         BlockPlacementWorkload blockPlacementWorkload = new BlockPlacementWorkload(world.getUID(), goldBlockLocation.getBlockX(), goldBlockLocation.getBlockY(), goldBlockLocation.getBlockZ(), Material.GOLD_BLOCK);
-        this.workloadRunnable.addWorkload(blockPlacementWorkload);
+        this.workloadQueue.addWorkload(blockPlacementWorkload);
         createRoom(cornerA, cornerB, dungeonType);
     }
 
@@ -241,7 +194,7 @@ public class DistributedWorkload {
         if (blacklistedCoordinates.contains(nextPoint)) return;
         Material platformMaterial = DungeonTemplate.getRandomMaterial(dungeonType);
         BlockPlacementWorkload blockPlacementWorkload = new BlockPlacementWorkload(world.getUID(), nextPoint.getBlockX(), nextPoint.getBlockY(), nextPoint.getBlockZ(), platformMaterial);
-        this.workloadRunnable.addWorkload(blockPlacementWorkload);
+        this.workloadQueue.addWorkload(blockPlacementWorkload);
 
         for (int ex = -2; ex <= 2; ex++) {
             for (int ez = -2; ez <= 2; ez++) {

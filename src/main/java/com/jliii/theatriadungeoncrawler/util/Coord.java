@@ -11,6 +11,14 @@ public class Coord {
         this.z = z;
     }
 
+    public int getX() {
+        return x;
+    }
+
+    public int getZ() {
+        return z;
+    }
+
     @Override
     public boolean equals(Object obj) {
         if (this == obj) {
