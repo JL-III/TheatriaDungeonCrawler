@@ -138,7 +138,7 @@ public class DungeonLayoutGenerator {
 
         // Seal the door behind the player and consume the emerald.
         if (checkpoint.hasDoor()) {
-            closeFill(checkpoint.getDoorMin(), checkpoint.getDoorMax(), doorMaterial(checkpoint.getTheme()));
+            closeFill(checkpoint.getDoorMin(), checkpoint.getDoorMax(), CORRIDOR_MATERIAL);
         }
         removeEmerald(grid, checkpointChunk);
 
@@ -207,16 +207,18 @@ public class DungeonLayoutGenerator {
         Connection c = connection(grid, from, dir[0], dir[1]);
         Location[] box = roomBox(grid, c.to);
 
+        // Build the new room, then a solid stone-brick bridge spanning both
+        // shared walls, then carve one continuous tunnel straight through it.
+        // The carve is queued last, so nothing can re-seal the passage.
         workload.createRoom(box[0], box[1], theme);
-        workload.fillHollowCorridor(c.corridorMin, c.corridorMax, CORRIDOR_MATERIAL);
-        carveOpen(c.toDoorMin, c.toDoorMax);     // new room's incoming door
-        carveOpen(c.fromDoorMin, c.fromDoorMax); // from room's outgoing door (gated last)
+        workload.fillSolidBox(c.bridgeMin, c.bridgeMax, CORRIDOR_MATERIAL);
+        carveOpen(c.tunnelMin, c.tunnelMax);
         placeDoorTorches(grid, from, dir);                          // light the exit doorway
         placeDoorTorches(grid, c.to, new int[]{-dir[0], -dir[1]});  // light the entrance doorway
 
         grid.markOccupied(c.to);
         return new RoomNode(c.to, theme, box[0], box[1],
-                c.corridorMin, c.corridorMax, c.toDoorMin, c.toDoorMax);
+                c.bridgeMin, c.bridgeMax, c.toDoorMin, c.toDoorMax);
     }
 
     /** Clears the tail room (and its corridors), freeing its chunk for reuse. */
@@ -332,8 +334,10 @@ public class DungeonLayoutGenerator {
     }
 
     /**
-     * Computes the corridor box and the two doorway boxes between {@code from}
-     * and its neighbour in direction (dx, dz).
+     * Computes the connection boxes between {@code from} and its neighbour in
+     * direction (dx, dz): a solid bridge spanning both shared walls, the tunnel
+     * carved straight through it (through both walls and the gap), and the
+     * tunnel slice in the new room's wall (for sealing it later).
      */
     private Connection connection(DungeonGrid grid, Coord from, int dx, int dz) {
         int oy = grid.getOriginY();
@@ -348,13 +352,13 @@ public class DungeonLayoutGenerator {
         int tMinZ = roomMinZ(to);
         int tMaxZ = tMinZ + FOOT - 1;
 
-        int corrHalf = CORRIDOR_WIDTH / 2;     // corridor box half-width (2)
-        int doorHalf = DOOR_WIDTH / 2;         // door opening half-width (1)
-        int doorTop = oy + DOOR_HEIGHT;        // door spans oy+1 .. oy+DOOR_HEIGHT
-        int corrTop = oy + CORRIDOR_HEIGHT - 1;
+        int corrHalf = CORRIDOR_WIDTH / 2;     // bridge half-width (2)
+        int doorHalf = DOOR_WIDTH / 2;         // tunnel/door half-width (1)
+        int bridgeTop = oy + CORRIDOR_HEIGHT - 1;
+        int tunnelTop = oy + DOOR_HEIGHT;      // tunnel spans oy+1 .. oy+DOOR_HEIGHT
 
         if (dz == 0) {
-            // East/West: corridor along X, centred on Z.
+            // East/West: span along X, centred on Z.
             int zc = fMinZ + FOOT / 2;
             int fWallX = (dx == 1) ? fMaxX : fMinX;
             int tWallX = (dx == 1) ? tMinX : tMaxX;
@@ -362,13 +366,13 @@ public class DungeonLayoutGenerator {
             int hiX = Math.max(fWallX, tWallX);
             return new Connection(to,
                     new Location(world, loX, oy, zc - corrHalf),
-                    new Location(world, hiX, corrTop, zc + corrHalf),
-                    new Location(world, fWallX, oy + 1, zc - doorHalf),
-                    new Location(world, fWallX, doorTop, zc + doorHalf),
+                    new Location(world, hiX, bridgeTop, zc + corrHalf),
+                    new Location(world, loX, oy + 1, zc - doorHalf),
+                    new Location(world, hiX, tunnelTop, zc + doorHalf),
                     new Location(world, tWallX, oy + 1, zc - doorHalf),
-                    new Location(world, tWallX, doorTop, zc + doorHalf));
+                    new Location(world, tWallX, tunnelTop, zc + doorHalf));
         } else {
-            // North/South: corridor along Z, centred on X.
+            // North/South: span along Z, centred on X.
             int xc = fMinX + FOOT / 2;
             int fWallZ = (dz == 1) ? fMaxZ : fMinZ;
             int tWallZ = (dz == 1) ? tMinZ : tMaxZ;
@@ -376,11 +380,11 @@ public class DungeonLayoutGenerator {
             int hiZ = Math.max(fWallZ, tWallZ);
             return new Connection(to,
                     new Location(world, xc - corrHalf, oy, loZ),
-                    new Location(world, xc + corrHalf, corrTop, hiZ),
-                    new Location(world, xc - doorHalf, oy + 1, fWallZ),
-                    new Location(world, xc + doorHalf, doorTop, fWallZ),
+                    new Location(world, xc + corrHalf, bridgeTop, hiZ),
+                    new Location(world, xc - doorHalf, oy + 1, loZ),
+                    new Location(world, xc + doorHalf, tunnelTop, hiZ),
                     new Location(world, xc - doorHalf, oy + 1, tWallZ),
-                    new Location(world, xc + doorHalf, doorTop, tWallZ));
+                    new Location(world, xc + doorHalf, tunnelTop, tWallZ));
         }
     }
 
@@ -474,11 +478,6 @@ public class DungeonLayoutGenerator {
         return theme != null ? theme : DungeonTemplate.getRandomTheme();
     }
 
-    private Material doorMaterial(DungeonTemplate.DungeonType theme) {
-        DungeonTemplate.DungeonType t = theme != null ? theme : DungeonTemplate.getRandomTheme();
-        return DungeonTemplate.getRandomMaterial(t);
-    }
-
     /** Maps a grid direction to a cardinal name (Minecraft: +X east, +Z south). */
     private String cardinal(int[] dir) {
         if (dir[0] == 1) {
@@ -493,25 +492,30 @@ public class DungeonLayoutGenerator {
         return "North";
     }
 
-    /** Immutable bundle of the boxes that make up a room-to-room connection. */
+    /**
+     * Immutable bundle of the boxes that make up a room-to-room connection: a
+     * solid stone-brick {@code bridge} spanning both rooms' shared walls, the
+     * {@code tunnel} carved straight through it, and {@code toDoor} (the tunnel
+     * slice in the new room's wall, used to seal it later).
+     */
     private static final class Connection {
         private final Coord to;
-        private final Location corridorMin;
-        private final Location corridorMax;
-        private final Location fromDoorMin;
-        private final Location fromDoorMax;
+        private final Location bridgeMin;
+        private final Location bridgeMax;
+        private final Location tunnelMin;
+        private final Location tunnelMax;
         private final Location toDoorMin;
         private final Location toDoorMax;
 
         private Connection(Coord to,
-                           Location corridorMin, Location corridorMax,
-                           Location fromDoorMin, Location fromDoorMax,
+                           Location bridgeMin, Location bridgeMax,
+                           Location tunnelMin, Location tunnelMax,
                            Location toDoorMin, Location toDoorMax) {
             this.to = to;
-            this.corridorMin = corridorMin;
-            this.corridorMax = corridorMax;
-            this.fromDoorMin = fromDoorMin;
-            this.fromDoorMax = fromDoorMax;
+            this.bridgeMin = bridgeMin;
+            this.bridgeMax = bridgeMax;
+            this.tunnelMin = tunnelMin;
+            this.tunnelMax = tunnelMax;
             this.toDoorMin = toDoorMin;
             this.toDoorMax = toDoorMax;
         }
