@@ -21,28 +21,30 @@ import java.util.Random;
 import java.util.Set;
 
 /**
- * Generates and grows an infinite, sliding-window dungeon into a void world.
+ * Generates and grows an infinite dungeon into a void world, one segment at a time.
  *
- * <p>Rooms are aligned one-per-chunk on a single Y plane. The active rooms form
- * a path (the "snake body") capped at {@link DungeonGrid#getWindow()} rooms:
- * {@link #advance} adds a room at the head and trims the tail, so the dungeon
- * extends forever with a bounded block footprint.</p>
+ * <p>Rooms are aligned one-per-chunk on a single Y plane. The dungeon is made of
+ * <em>segments</em>: a run of 7-15 rooms (the {@link #advance} builds one whole
+ * segment) ending in a single emerald <em>checkpoint</em> room. Doors within a
+ * segment are open, so the player walks the stretch freely.</p>
  *
  * <h2>Checkpoint ("loading room") mechanic</h2>
- * The head room holds an emerald checkpoint and has exactly one open door (the
- * way in). When the player steps on the emerald, {@link #advance}:
+ * Only the last room of a segment holds the emerald. When the player steps on it,
+ * {@link #advance}:
  * <ol>
  *   <li>seals the door behind the player,</li>
- *   <li>builds the next room and corridor, opening the forward door <em>last</em>
- *       so — because the build queue is FIFO — it only opens once the new room
+ *   <li>builds the next whole segment, opening each forward door <em>last</em>
+ *       so — because the build queue is FIFO — a door only opens once its room
  *       has finished building,</li>
- *   <li>moves the emerald into the new head room, and</li>
- *   <li>removes the oldest room, freeing its chunk.</li>
+ *   <li>moves the emerald into the new segment's checkpoint, and</li>
+ *   <li>removes every room behind the checkpoint, freeing those chunks.</li>
  * </ol>
  *
- * <h2>Dead-end avoidance</h2>
+ * <h2>Dead-end avoidance &amp; wayfinding</h2>
  * The growth direction is chosen like a snake game: a bounded flood fill over
  * free chunks rejects directions that would box the dungeon into a dead end.
+ * Each room is given a glowing floor trail toward its exit, and each checkpoint
+ * records the cardinal direction it opened toward.
  *
  * <p>All block edits are queued onto the instance's {@link WorkloadRunnable},
  * which spreads them across ticks to avoid stalling the server.</p>
@@ -65,11 +67,16 @@ public class DungeonLayoutGenerator {
     private static final int DOOR_HEIGHT = 3;
     /** Minimum free chunks reachable from a candidate for it to be "safe". */
     private static final int SAFETY_CELLS = 16;
+    /** A segment is this many rooms (inclusive bounds) ending in a checkpoint. */
+    private static final int MIN_SEGMENT = 7;
+    private static final int MAX_SEGMENT = 15;
 
     private static final Material CORRIDOR_MATERIAL = Material.STONE_BRICKS;
     private static final Material GOAL_MARKER = Material.EMERALD_BLOCK;
     /** Block that replaces a consumed emerald checkpoint. */
     private static final Material FLOOR_MATERIAL = Material.STONE_BRICKS;
+    /** Glowing block used to mark the floor trail toward each room's exit. */
+    private static final Material TRAIL_MATERIAL = Material.SEA_LANTERN;
 
     private static final int[][] DIRS = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
 
@@ -84,81 +91,105 @@ public class DungeonLayoutGenerator {
     }
 
     /**
-     * Builds the initial path of {@code window} rooms anchored at {@code origin},
-     * ending in the emerald checkpoint (loading) room.
+     * Builds the spawn room and the first segment, ending in the emerald
+     * checkpoint (loading) room.
      *
-     * @param origin lowest corner of the start room's chunk (its Y is the floor)
-     * @param window number of rooms kept alive at once (clamped to at least 2)
-     * @param theme  fixed theme for every room, or {@code null} for random
+     * @param origin             lowest corner of the start chunk (its Y is the floor)
+     * @param fixedSegmentLength forced segment length, or {@code <= 0} for random
+     * @param theme              fixed theme for every room, or {@code null} for random
      * @return the dungeon's growing layout state
      */
-    public DungeonGrid generateInitial(Location origin, int window, DungeonTemplate.DungeonType theme, Random random) {
-        int w = Math.max(2, window);
-        DungeonGrid grid = new DungeonGrid(world, origin.getBlockY(), theme, w);
+    public DungeonGrid generateInitial(Location origin, int fixedSegmentLength, DungeonTemplate.DungeonType theme, Random random) {
+        DungeonGrid grid = new DungeonGrid(world, origin.getBlockY(), theme, fixedSegmentLength);
 
         Coord start = new Coord(0, 0);
         DungeonTemplate.DungeonType startTheme = themeFor(theme, random);
         Location[] startBox = roomBox(grid, start);
         workload.createRoom(startBox[0], startBox[1], startTheme);
         grid.markOccupied(start);
-        grid.getPath().addLast(new RoomNode(start, startTheme, startBox[0], startBox[1], null, null, null, null));
+        RoomNode startNode = new RoomNode(start, startTheme, startBox[0], startBox[1], null, null, null, null);
+        grid.getPath().addLast(startNode);
         grid.setSpawn(spawnLocation(grid, start));
 
-        Coord cur = start;
-        while (grid.getPath().size() < w) {
-            int[] dir = pickDirection(grid, cur, random);
-            if (dir == null) {
-                break;
-            }
-            RoomNode node = extendRoom(grid, cur, dir, themeFor(theme, random));
-            grid.getPath().addLast(node);
-            cur = node.getChunk();
-        }
-
-        placeEmerald(grid, cur);
+        RoomNode checkpoint = growSegment(grid, startNode, segmentLength(grid, random), random);
+        placeEmerald(grid, checkpoint.getChunk());
         return grid;
     }
 
     /**
-     * Advances the dungeon one room when the player reaches the checkpoint:
-     * seals behind, builds and opens the way to a new head room, moves the
-     * emerald forward, and trims the tail.
+     * Advances the dungeon a whole segment when the player reaches a checkpoint:
+     * seals the door behind, builds the next 7-15 room segment ending in a new
+     * checkpoint, then removes every room behind the checkpoint the player is
+     * standing in.
      *
      * @return {@code true} if the dungeon was extended; {@code false} only if the
-     *         head was somehow boxed in (effectively never on an open plane)
+     *         checkpoint was somehow boxed in (effectively never on an open plane)
      */
     public boolean advance(DungeonGrid grid, Random random) {
-        RoomNode head = grid.getPath().peekLast();
-        if (head == null) {
+        RoomNode checkpoint = grid.getPath().peekLast();
+        if (checkpoint == null) {
             return false;
         }
-        Coord headChunk = head.getChunk();
+        Coord checkpointChunk = checkpoint.getChunk();
 
-        // 1. Seal the door behind the player.
-        if (head.hasDoor()) {
-            closeFill(head.getDoorMin(), head.getDoorMax(), doorMaterial(head.getTheme()));
+        // Seal the door behind the player and consume the emerald.
+        if (checkpoint.hasDoor()) {
+            closeFill(checkpoint.getDoorMin(), checkpoint.getDoorMax(), doorMaterial(checkpoint.getTheme()));
         }
-        // 2. Consume the emerald (immediate feedback) before the new one appears.
-        removeEmerald(grid, headChunk);
+        removeEmerald(grid, checkpointChunk);
 
-        // 3. Pick a snake-safe direction and build the next head room. The
-        //    forward door is carved last (inside extendRoom), so it only opens
-        //    once the new room has finished building.
-        int[] dir = pickDirection(grid, headChunk, random);
-        if (dir == null) {
+        // Build the next whole segment. The door out of the checkpoint is carved
+        // last (inside extendRoom), so it only opens once its room has built.
+        RoomNode nextCheckpoint = growSegment(grid, checkpoint, segmentLength(grid, random), random);
+        if (nextCheckpoint == checkpoint) {
+            // Could not extend at all (effectively impossible); undo the seal.
+            if (checkpoint.hasDoor()) {
+                carveOpen(checkpoint.getDoorMin(), checkpoint.getDoorMax());
+            }
+            placeEmerald(grid, checkpointChunk);
             return false;
         }
-        RoomNode node = extendRoom(grid, headChunk, dir, themeFor(grid.getTheme(), random));
+        placeEmerald(grid, nextCheckpoint.getChunk());
 
-        // 4. Emerald moves into the new head room.
-        placeEmerald(grid, node.getChunk());
-
-        // 5. Append the new head and trim the tail to keep the window bounded.
-        grid.getPath().addLast(node);
-        while (grid.getPath().size() > grid.getWindow()) {
+        // Remove every room behind the checkpoint the player just stepped on.
+        while (grid.getPath().peekFirst() != checkpoint) {
             removeTail(grid);
         }
         return true;
+    }
+
+    /**
+     * Grows a connected run of {@code rooms} rooms branching from {@code start};
+     * the last room is the segment's checkpoint. Doors within the segment are
+     * left open, and each room is given a floor trail pointing to its exit.
+     *
+     * @return the last room built (the checkpoint), or {@code start} if none
+     *         could be placed
+     */
+    private RoomNode growSegment(DungeonGrid grid, RoomNode start, int rooms, Random random) {
+        RoomNode cur = start;
+        for (int i = 0; i < rooms; i++) {
+            int[] dir = pickDirection(grid, cur.getChunk(), random);
+            if (dir == null) {
+                break;
+            }
+            RoomNode node = extendRoom(grid, cur.getChunk(), dir, themeFor(grid.getTheme(), random));
+            layTrail(grid, cur.getChunk(), dir);
+            if (cur == start) {
+                grid.setLastExitDirection(cardinal(dir));
+            }
+            grid.getPath().addLast(node);
+            cur = node;
+        }
+        return cur;
+    }
+
+    private int segmentLength(DungeonGrid grid, Random random) {
+        int fixed = grid.getFixedSegmentLength();
+        if (fixed > 0) {
+            return fixed;
+        }
+        return MIN_SEGMENT + random.nextInt(MAX_SEGMENT - MIN_SEGMENT + 1);
     }
 
     // --- room / corridor construction -------------------------------------
@@ -236,17 +267,10 @@ public class DungeonLayoutGenerator {
 
     /**
      * Counts free chunks reachable from {@code start} (capped at
-     * {@link #SAFETY_CELLS}). The tail chunk is treated as free because it is
-     * released when the dungeon advances.
+     * {@link #SAFETY_CELLS}), treating currently-occupied chunks as walls.
      */
     private int floodReach(DungeonGrid grid, Coord start) {
-        Set<Coord> blocked = new HashSet<>(grid.getOccupiedChunks());
-        if (grid.getPath().size() >= grid.getWindow()) {
-            RoomNode tail = grid.getPath().peekFirst();
-            if (tail != null) {
-                blocked.remove(tail.getChunk());
-            }
-        }
+        Set<Coord> blocked = grid.getOccupiedChunks();
 
         Set<Coord> visited = new HashSet<>();
         Deque<Coord> queue = new ArrayDeque<>();
@@ -368,6 +392,19 @@ public class DungeonLayoutGenerator {
         workloadRunnable.addWorkload(new BlockPlacementWorkload(world.getUID(), cx, grid.getOriginY(), cz, FLOOR_MATERIAL));
     }
 
+    /** Lays a glowing floor trail from a room's centre toward its exit door. */
+    private void layTrail(DungeonGrid grid, Coord cell, int[] dir) {
+        int oy = grid.getOriginY();
+        int cx = centerX(cell);
+        int cz = centerZ(cell);
+        int steps = FOOT / 2 - 1; // from just past the centre up to the wall
+        for (int i = 1; i <= steps; i++) {
+            int x = cx + dir[0] * i;
+            int z = cz + dir[1] * i;
+            workloadRunnable.addWorkload(new BlockPlacementWorkload(world.getUID(), x, oy, z, TRAIL_MATERIAL));
+        }
+    }
+
     private void carveOpen(Location min, Location max) {
         workload.fillSolidBox(min, max, Material.AIR);
     }
@@ -389,6 +426,20 @@ public class DungeonLayoutGenerator {
     private Material doorMaterial(DungeonTemplate.DungeonType theme) {
         DungeonTemplate.DungeonType t = theme != null ? theme : DungeonTemplate.getRandomTheme();
         return DungeonTemplate.getRandomMaterial(t);
+    }
+
+    /** Maps a grid direction to a cardinal name (Minecraft: +X east, +Z south). */
+    private String cardinal(int[] dir) {
+        if (dir[0] == 1) {
+            return "East";
+        }
+        if (dir[0] == -1) {
+            return "West";
+        }
+        if (dir[1] == 1) {
+            return "South";
+        }
+        return "North";
     }
 
     /** Immutable bundle of the boxes that make up a room-to-room connection. */

@@ -20,27 +20,28 @@ import java.util.Set;
  * world location of the current emerald checkpoint.</p>
  *
  * <p>Occupancy is tracked per chunk on a single Y plane ({@link #getOriginY()}).
- * The grid never grows without bound: the path is capped at {@link #getWindow()}
- * rooms, and trimmed tail chunks are freed for reuse.</p>
+ * The dungeon never grows without bound: when the player passes a checkpoint the
+ * rooms behind it are removed and their chunks freed for reuse.</p>
  */
 public class DungeonGrid {
 
     private final World world;
     private final int originY;
     private final DungeonTemplate.DungeonType theme;
-    private final int window;
+    private final int fixedSegmentLength;
 
     private final Set<Coord> occupiedChunks = new HashSet<>();
     private final Deque<RoomNode> path = new ArrayDeque<>();
 
     private Location spawn;
     private Location emeraldLocation;
+    private String lastExitDirection;
 
-    public DungeonGrid(World world, int originY, DungeonTemplate.DungeonType theme, int window) {
+    public DungeonGrid(World world, int originY, DungeonTemplate.DungeonType theme, int fixedSegmentLength) {
         this.world = world;
         this.originY = originY;
         this.theme = theme;
-        this.window = window;
+        this.fixedSegmentLength = fixedSegmentLength;
     }
 
     public World getWorld() {
@@ -56,9 +57,9 @@ public class DungeonGrid {
         return theme;
     }
 
-    /** @return the maximum number of rooms kept alive at once. */
-    public int getWindow() {
-        return window;
+    /** @return a forced segment length, or {@code <= 0} to use a random 7-15. */
+    public int getFixedSegmentLength() {
+        return fixedSegmentLength;
     }
 
     public boolean isOccupied(Coord chunk) {
@@ -95,6 +96,15 @@ public class DungeonGrid {
 
     public void setEmeraldLocation(Location emeraldLocation) {
         this.emeraldLocation = emeraldLocation;
+    }
+
+    /** @return the cardinal direction the most recent checkpoint opened toward. */
+    public String getLastExitDirection() {
+        return lastExitDirection;
+    }
+
+    public void setLastExitDirection(String lastExitDirection) {
+        this.lastExitDirection = lastExitDirection;
     }
 
     /**

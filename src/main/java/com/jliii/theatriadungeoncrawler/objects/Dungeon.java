@@ -28,7 +28,7 @@ public class Dungeon {
     private final Map<UUID, Location> returnLocations = new HashMap<>();
 
     private final World world;
-    private final int windowSize;
+    private final int fixedSegmentLength;
     private final DungeonTemplate.DungeonType theme;
 
     private DungeonGrid grid;
@@ -36,9 +36,9 @@ public class Dungeon {
     private int buildTaskId = -1;
     private boolean extending = false;
 
-    public Dungeon(World world, int windowSize, DungeonTemplate.DungeonType theme) {
+    public Dungeon(World world, int fixedSegmentLength, DungeonTemplate.DungeonType theme) {
         this.world = world;
-        this.windowSize = windowSize;
+        this.fixedSegmentLength = fixedSegmentLength;
         this.theme = theme;
     }
 
@@ -80,8 +80,8 @@ public class Dungeon {
         return world;
     }
 
-    public int getWindowSize() {
-        return windowSize;
+    public int getFixedSegmentLength() {
+        return fixedSegmentLength;
     }
 
     public DungeonTemplate.DungeonType getTheme() {

@@ -16,9 +16,6 @@ import org.jetbrains.annotations.NotNull;
  */
 public class DungeonCommands implements CommandExecutor {
 
-    /** Default number of rooms kept alive at once (the sliding window). */
-    private static final int DEFAULT_WINDOW = 6;
-
     private final DungeonManager dungeonManager;
     private final AdminCommands adminCommands;
 
@@ -30,7 +27,7 @@ public class DungeonCommands implements CommandExecutor {
     @Override
     public boolean onCommand(@NotNull CommandSender sender, @NotNull Command command, @NotNull String label, @NotNull String[] args) {
         if (args.length == 0) {
-            sender.sendMessage("Usage: /dungeons <start|leave> [window] [theme]");
+            sender.sendMessage("Usage: /dungeons <start|leave> [segment-length] [theme]");
             return true;
         }
 
@@ -51,16 +48,16 @@ public class DungeonCommands implements CommandExecutor {
             return true;
         }
 
-        int window = DEFAULT_WINDOW;
+        int segmentLength = 0; // 0 => random 7-15 rooms per segment
         if (args.length >= 2) {
             try {
-                window = Integer.parseInt(args[1]);
+                segmentLength = Integer.parseInt(args[1]);
             } catch (NumberFormatException e) {
-                player.sendMessage("Window size must be a number.");
+                player.sendMessage("Segment length must be a number.");
                 return true;
             }
-            if (window < 2) {
-                player.sendMessage("Window size must be at least 2.");
+            if (segmentLength < 1) {
+                player.sendMessage("Segment length must be at least 1.");
                 return true;
             }
         }
@@ -75,7 +72,7 @@ public class DungeonCommands implements CommandExecutor {
             }
         }
 
-        dungeonManager.startDungeon(player, window, theme);
+        dungeonManager.startDungeon(player, segmentLength, theme);
         return true;
     }
 

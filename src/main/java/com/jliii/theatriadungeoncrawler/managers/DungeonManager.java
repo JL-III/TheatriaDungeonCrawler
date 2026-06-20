@@ -32,8 +32,6 @@ public class DungeonManager {
 
     /** Y level of the dungeon floor (the build origin) in every instance world. */
     private static final int ORIGIN_Y = 64;
-    /** Default window (active room count) if the player doesn't specify one. */
-    private static final int DEFAULT_WINDOW = 6;
 
     private final Plugin plugin;
     private final Random random = new Random();
@@ -50,23 +48,22 @@ public class DungeonManager {
      * Starts a new endless dungeon for the player, remembering where they came
      * from. If they are already in a dungeon they are removed from it first.
      *
-     * @param window number of rooms kept alive at once (clamped to at least 2);
-     *               pass a value &lt;= 0 to use the default
+     * @param fixedSegmentLength forces the rooms-per-segment count; pass a value
+     *                           &lt;= 0 to use a random 7-15 per segment
      */
-    public void startDungeon(Player player, int window, DungeonTemplate.DungeonType theme) {
+    public void startDungeon(Player player, int fixedSegmentLength, DungeonTemplate.DungeonType theme) {
         if (instanceByPlayer.containsKey(player.getUniqueId())) {
             leaveDungeon(player);
         }
 
-        int windowSize = window <= 0 ? DEFAULT_WINDOW : Math.max(2, window);
-        Dungeon dungeon = createInstance(windowSize, theme);
+        Dungeon dungeon = createInstance(fixedSegmentLength, theme);
         if (dungeon == null) {
             player.sendMessage("Failed to create the dungeon world. Try again.");
             return;
         }
 
         addPlayer(dungeon, player, player.getLocation());
-        player.sendMessage("Entering an endless dungeon. Step on the emerald block to open the next room!");
+        player.sendMessage("Entering an endless dungeon. Follow the lit trail to the emerald checkpoint at the end of each stretch of rooms.");
     }
 
     /**
@@ -127,13 +124,13 @@ public class DungeonManager {
      * Creates the world, schedules its build queue, generates the initial path,
      * and registers the instance. Does not add any players.
      */
-    private Dungeon createInstance(int windowSize, DungeonTemplate.DungeonType theme) {
+    private Dungeon createInstance(int fixedSegmentLength, DungeonTemplate.DungeonType theme) {
         World world = WorldFactory.createInstanceWorld();
         if (world == null) {
             return null;
         }
 
-        Dungeon dungeon = new Dungeon(world, windowSize, theme);
+        Dungeon dungeon = new Dungeon(world, fixedSegmentLength, theme);
 
         // Each instance builds on its own queue so instances never block each other.
         int buildTaskId = Bukkit.getScheduler()
@@ -143,7 +140,7 @@ public class DungeonManager {
 
         Location origin = new Location(world, 0, ORIGIN_Y, 0);
         DungeonLayoutGenerator generator = new DungeonLayoutGenerator(world, dungeon.getWorkloadRunnable());
-        DungeonGrid grid = generator.generateInitial(origin, windowSize, theme, random);
+        DungeonGrid grid = generator.generateInitial(origin, fixedSegmentLength, theme, random);
         dungeon.setGrid(grid);
         dungeon.setState(State.ACTIVE);
 
@@ -189,8 +186,10 @@ public class DungeonManager {
             DungeonLayoutGenerator generator =
                     new DungeonLayoutGenerator(grid.getWorld(), dungeon.getWorkloadRunnable());
             boolean extended = generator.advance(grid, random);
+            String direction = grid.getLastExitDirection();
             String message = extended
-                    ? "Checkpoint! Sealing the way back and opening the path ahead..."
+                    ? "Checkpoint reached! The path opens to the "
+                            + (direction != null ? direction : "unknown") + " — follow the lit trail."
                     : "The dungeon cannot extend any further from here.";
             for (UUID playerId : dungeon.getPlayers()) {
                 Player player = Bukkit.getPlayer(playerId);
