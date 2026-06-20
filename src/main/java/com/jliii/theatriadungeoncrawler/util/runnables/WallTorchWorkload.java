@@ -32,7 +32,7 @@ public class WallTorchWorkload implements Workload {
     }
 
     @Override
-    public void compute() {
+    public boolean compute() {
         World world = Bukkit.getWorld(this.worldID);
         Preconditions.checkState(world != null);
         Block block = world.getBlockAt(this.blockX, this.blockY, this.blockZ);
@@ -42,5 +42,6 @@ public class WallTorchWorkload implements Workload {
             ((Directional) data).setFacing(this.facing);
             block.setBlockData(data, false);
         }
+        return true;
     }
 }

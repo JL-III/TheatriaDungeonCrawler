@@ -3,7 +3,6 @@ package com.jliii.theatriadungeoncrawler.listeners;
 import com.jliii.theatriadungeoncrawler.factories.WorldFactory;
 import com.jliii.theatriadungeoncrawler.managers.DungeonManager;
 import org.bukkit.Bukkit;
-import org.bukkit.GameMode;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -31,14 +30,10 @@ public class PlayerConnectionListener implements Listener {
     @EventHandler
     public void onJoin(PlayerJoinEvent event) {
         // A player who logged out inside an instance world (since deleted) would
-        // otherwise rejoin into the void. Send them to the main world spawn and
-        // out of adventure mode.
+        // otherwise rejoin into the void. Send them to the main world spawn.
         Player player = event.getPlayer();
         if (player.getWorld().getName().startsWith(WorldFactory.INSTANCE_WORLD_PREFIX)) {
             player.teleport(Bukkit.getWorlds().get(0).getSpawnLocation());
-            if (player.getGameMode() == GameMode.ADVENTURE) {
-                player.setGameMode(GameMode.SURVIVAL);
-            }
         }
     }
 }

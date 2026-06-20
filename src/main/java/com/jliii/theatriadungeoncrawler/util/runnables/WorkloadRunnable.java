@@ -19,6 +19,11 @@ public class WorkloadRunnable implements Runnable {
         this.manualExecution = manualExecution;
     }
 
+    /** @return {@code true} if there is queued work still to process. */
+    public boolean isBusy() {
+        return !this.workloadDeque.isEmpty();
+    }
+
     @Override
     public void run() {
         if (manualExecution) {
@@ -29,15 +34,19 @@ public class WorkloadRunnable implements Runnable {
         Workload nextLoad;
 
         while (System.nanoTime() <= stopTime && (nextLoad = this.workloadDeque.poll()) != null) {
-            nextLoad.compute();
+            // An incomplete workload (e.g. a region filled in batches) resumes
+            // at the front of the queue, preserving order for what follows it.
+            if (!nextLoad.compute()) {
+                this.workloadDeque.addFirst(nextLoad);
+            }
         }
 
     }
 
     public void executeNextWorkload() {
         Workload nextLoad = this.workloadDeque.poll();
-        if (nextLoad != null) {
-            nextLoad.compute();
+        if (nextLoad != null && !nextLoad.compute()) {
+            this.workloadDeque.addFirst(nextLoad);
         }
     }
 }

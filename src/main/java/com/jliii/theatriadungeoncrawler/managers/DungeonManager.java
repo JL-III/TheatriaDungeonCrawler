@@ -6,8 +6,8 @@ import com.jliii.theatriadungeoncrawler.factories.WorldFactory;
 import com.jliii.theatriadungeoncrawler.objects.Dungeon;
 import com.jliii.theatriadungeoncrawler.objects.DungeonGrid;
 import com.jliii.theatriadungeoncrawler.templates.DungeonTemplate;
+import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
-import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
@@ -26,11 +26,11 @@ import java.util.UUID;
  * Owns the lifecycle of dungeon instances: one void world per run, into which an
  * infinite, segment-by-segment dungeon is generated and grown.
  *
- * <p>Players enter empty-handed (so nothing brought in can be lost) and in
- * adventure mode (so they can't grief the dungeon), and are always returned to
- * the main world in survival mode — on leaving, dying, disconnecting, or
- * wandering out. Instance state is kept entirely in memory: a crash simply
- * leaves orphaned worlds, which are purged on the next startup.</p>
+ * <p>Players enter empty-handed (so nothing brought in can be lost); the dungeon
+ * is protected from breaking/placing by event cancellation, so no game-mode
+ * changes are needed. Players are returned to the main world on leaving, dying,
+ * disconnecting, or wandering out. Instance state is kept entirely in memory: a
+ * crash simply leaves orphaned worlds, which are purged on the next startup.</p>
  */
 public class DungeonManager {
 
@@ -103,7 +103,6 @@ public class DungeonManager {
             return;
         }
         detachPlayer(dungeon, player);
-        player.setGameMode(GameMode.SURVIVAL);
         Bukkit.getScheduler().runTask(plugin, () -> disposeIfEmpty(dungeon));
     }
 
@@ -121,12 +120,8 @@ public class DungeonManager {
             return null;
         }
         Location returnTo = detachPlayer(dungeon, player);
-        // Restore survival and dispose next tick, after the respawn has moved
-        // the player out into the main world.
-        Bukkit.getScheduler().runTask(plugin, () -> {
-            player.setGameMode(GameMode.SURVIVAL);
-            disposeIfEmpty(dungeon);
-        });
+        // Dispose next tick, after the respawn has moved the player out.
+        Bukkit.getScheduler().runTask(plugin, () -> disposeIfEmpty(dungeon));
         return safeLocation(returnTo);
     }
 
@@ -180,8 +175,6 @@ public class DungeonManager {
         spawn.setYaw(player.getLocation().getYaw());
         spawn.setPitch(player.getLocation().getPitch());
         player.teleport(spawn);
-        // Adventure mode prevents breaking or placing the dungeon's blocks.
-        player.setGameMode(GameMode.ADVENTURE);
     }
 
     /** Removes a player from an instance, returning their stored return location. */
@@ -212,12 +205,21 @@ public class DungeonManager {
                 Player player = Bukkit.getPlayer(playerId);
                 if (player != null && !player.getWorld().equals(dungeon.getWorld())) {
                     detachPlayer(dungeon, player);
-                    player.setGameMode(GameMode.SURVIVAL);
                 }
             }
             if (dungeon.isEmpty()) {
                 disposeInstance(dungeon);
                 continue;
+            }
+
+            // Let players know the area is still being built.
+            if (dungeon.getWorkloadRunnable().isBusy()) {
+                for (UUID playerId : dungeon.getPlayers()) {
+                    Player player = Bukkit.getPlayer(playerId);
+                    if (player != null) {
+                        player.sendActionBar(Component.text("Generating the area ahead..."));
+                    }
+                }
             }
 
             if (dungeon.isExtending()) {
@@ -303,9 +305,8 @@ public class DungeonManager {
         return offHand == null || offHand.getType() == Material.AIR;
     }
 
-    /** Teleports a player to safety in survival mode. */
+    /** Teleports a player out of the dungeon to a safe location. */
     private void sendToSafety(Player player, Location returnTo) {
-        player.setGameMode(GameMode.SURVIVAL);
         player.teleport(safeLocation(returnTo));
     }
 

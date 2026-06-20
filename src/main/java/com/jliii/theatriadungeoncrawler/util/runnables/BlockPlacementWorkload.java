@@ -14,7 +14,6 @@ public class BlockPlacementWorkload implements Workload {
     private final int blockY;
     private final int blockZ;
     private final Material material;
-//    private Player player;
 
     public BlockPlacementWorkload(UUID worldID, int blockX, int blockY, int blockZ, Material material) {
         this.worldID = worldID;
@@ -24,28 +23,12 @@ public class BlockPlacementWorkload implements Workload {
         this.material = material;
     }
 
-    /*
-     * This method is called when the workload is executed - specifically when setting blocks.
-     */
-
     @Override
-    public void compute() {
+    public boolean compute() {
         World world = Bukkit.getWorld(this.worldID);
         Preconditions.checkState(world != null);
-        world.getBlockAt(this.blockX, this.blockY, this.blockZ).setType(this.material);
-        world.getBlockAt(this.blockX, this.blockY, this.blockZ).getState().update(true, false);
-//        player.sendMessage("Block placed at " + this.blockX + ", " + this.blockY + ", " + this.blockZ);
-//        Location nextPoint = new Location(world, this.blockX, this.blockY, this.blockZ);
-//
-//        for (int i = 0; i <= 4; i++) {
-//            for (int dx = -1; dx <= 1; dx++) {
-//                for (int dz = -1; dz <= 1; dz++) {
-//                    Location loc = nextPoint.clone().add(dx, i, dz);
-//                    player.sendMessage("Blacklisted x:" + loc.getX() + " y:" + loc.getY() + " z:" + loc.getZ());
-//                }
-//            }
-//        }
+        // applyPhysics=false avoids physics/redundant-update cost on each block.
+        world.getBlockAt(this.blockX, this.blockY, this.blockZ).setType(this.material, false);
+        return true;
     }
-
-
 }
