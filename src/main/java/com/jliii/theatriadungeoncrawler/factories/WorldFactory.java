@@ -31,6 +31,34 @@ public final class WorldFactory {
     }
 
     /**
+     * Deletes every leftover instance world folder. Called on startup: since no
+     * instances are active yet, any {@code dungeon_*} world is orphaned (e.g. a
+     * crash left it behind), so it is unloaded if loaded and removed from disk.
+     *
+     * @return the number of orphaned worlds removed
+     */
+    public static int purgeOrphanedWorlds() {
+        File container = Bukkit.getWorldContainer();
+        File[] files = container.listFiles();
+        if (files == null) {
+            return 0;
+        }
+        int removed = 0;
+        for (File file : files) {
+            if (!file.isDirectory() || !file.getName().startsWith(INSTANCE_WORLD_PREFIX)) {
+                continue;
+            }
+            World loaded = Bukkit.getWorld(file.getName());
+            if (loaded != null) {
+                Bukkit.unloadWorld(loaded, false);
+            }
+            deleteRecursively(file);
+            removed++;
+        }
+        return removed;
+    }
+
+    /**
      * Creates a brand-new, uniquely-named void world for a single dungeon
      * instance. Each call produces a distinct world that can be disposed of
      * independently via {@link #disposeWorld(World)}.
@@ -117,14 +145,16 @@ public final class WorldFactory {
 
     /**
      * Locks the dungeon world to a stable, predictable state: permanent
-     * daytime, no weather, and no ambient mob spawning (mobs are placed
-     * explicitly by the dungeon logic instead).
+     * daytime, no weather, no ambient mob spawning (mobs are placed explicitly
+     * by the dungeon logic), and keep-inventory so a death never costs items or
+     * experience — the player simply respawns out in the main world.
      */
     private static void applyDungeonGameRules(World world) {
         world.setGameRule(GameRule.DO_DAYLIGHT_CYCLE, false);
         world.setGameRule(GameRule.DO_WEATHER_CYCLE, false);
         world.setGameRule(GameRule.DO_MOB_SPAWNING, false);
         world.setGameRule(GameRule.DO_FIRE_TICK, false);
+        world.setGameRule(GameRule.KEEP_INVENTORY, true);
         world.setStorm(false);
         world.setTime(6000);
         world.setSpawnLocation(0, 65, 0);

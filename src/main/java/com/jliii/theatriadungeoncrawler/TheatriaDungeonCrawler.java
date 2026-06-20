@@ -2,6 +2,7 @@ package com.jliii.theatriadungeoncrawler;
 
 import com.jliii.theatriadungeoncrawler.commands.Box;
 import com.jliii.theatriadungeoncrawler.commands.DungeonCommands;
+import com.jliii.theatriadungeoncrawler.factories.WorldFactory;
 import com.jliii.theatriadungeoncrawler.listeners.DungeonProtectionListener;
 import com.jliii.theatriadungeoncrawler.listeners.PlayerConnectionListener;
 import com.jliii.theatriadungeoncrawler.managers.DungeonManager;
@@ -19,6 +20,12 @@ public final class TheatriaDungeonCrawler extends JavaPlugin {
     @Override
     public void onEnable() {
         saveDefaultConfig();
+
+        // Remove any instance worlds left behind by a previous run/crash.
+        int purged = WorldFactory.purgeOrphanedWorlds();
+        if (purged > 0) {
+            getLogger().info("Removed " + purged + " orphaned dungeon world(s) from a previous session.");
+        }
 
         dungeonManager = new DungeonManager(this);
 

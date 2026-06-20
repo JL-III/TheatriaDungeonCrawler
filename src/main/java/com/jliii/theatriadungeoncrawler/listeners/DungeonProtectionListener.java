@@ -6,13 +6,13 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
-import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.event.player.PlayerRespawnEvent;
 
 /**
- * Protects players while they are inside a dungeon: they keep their items and
- * experience on death (the run ends and they return to the main world with
- * their loot), and they cannot break or place the dungeon's blocks.
+ * Protects players while they are inside a dungeon: they cannot break or place
+ * the dungeon's blocks, and a death ends the run by respawning them out in the
+ * main world. Items and experience are kept by the world's keep-inventory game
+ * rule (see {@code WorldFactory}), so no per-death handling is needed here.
  */
 public class DungeonProtectionListener implements Listener {
 
@@ -20,18 +20,6 @@ public class DungeonProtectionListener implements Listener {
 
     public DungeonProtectionListener(DungeonManager dungeonManager) {
         this.dungeonManager = dungeonManager;
-    }
-
-    @EventHandler
-    public void onDeath(PlayerDeathEvent event) {
-        if (!dungeonManager.isParticipant(event.getEntity())) {
-            return;
-        }
-        // Keep everything: no dropped items, no lost levels.
-        event.setKeepInventory(true);
-        event.getDrops().clear();
-        event.setKeepLevel(true);
-        event.setDroppedExp(0);
     }
 
     @EventHandler

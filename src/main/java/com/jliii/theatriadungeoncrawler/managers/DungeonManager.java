@@ -26,9 +26,11 @@ import java.util.UUID;
  * Owns the lifecycle of dungeon instances: one void world per run, into which an
  * infinite, segment-by-segment dungeon is generated and grown.
  *
- * <p>Players enter empty-handed and in adventure mode (so they can't break the
- * dungeon), and keep whatever they find — including on death, where they are
- * returned to the main world with their loot and experience intact.</p>
+ * <p>Players enter empty-handed (so nothing brought in can be lost) and in
+ * adventure mode (so they can't grief the dungeon), and are always returned to
+ * the main world in survival mode — on leaving, dying, disconnecting, or
+ * wandering out. Instance state is kept entirely in memory: a crash simply
+ * leaves orphaned worlds, which are purged on the next startup.</p>
  */
 public class DungeonManager {
 
@@ -42,14 +44,14 @@ public class DungeonManager {
 
     public DungeonManager(Plugin plugin) {
         this.plugin = plugin;
-        // Poll a few times per second for a player standing on the emerald.
-        Bukkit.getScheduler().runTaskTimer(plugin, this::checkCheckpoints, 20L, 5L);
+        // Poll a few times per second: advance checkpoints and detach stragglers.
+        Bukkit.getScheduler().runTaskTimer(plugin, this::tickInstances, 20L, 5L);
     }
 
     /**
      * Starts a new endless dungeon for the player. Requires an empty inventory
-     * and armor so nothing brought in can be lost, and remembers where they came
-     * from. If they are already in a dungeon they are removed from it first.
+     * and armor, and remembers where they came from. If they are already in a
+     * dungeon they are removed from it first.
      *
      * @param fixedSegmentLength forces the rooms-per-segment count; pass a value
      *                           &lt;= 0 to use a random 7-15 per segment
@@ -75,9 +77,9 @@ public class DungeonManager {
     }
 
     /**
-     * Removes the player from their current dungeon and returns them to where
-     * they entered from, restoring their game mode. Disposes the instance once
-     * it is empty.
+     * Removes the player from their current dungeon and returns them, in
+     * survival mode, to where they entered from. Disposes the instance once it
+     * is empty.
      */
     public void leaveDungeon(Player player) {
         Dungeon dungeon = instanceByPlayer.get(player.getUniqueId());
@@ -85,34 +87,30 @@ public class DungeonManager {
             player.sendMessage("You are not in a dungeon.");
             return;
         }
-        GameMode previous = dungeon.getReturnGameMode(player.getUniqueId());
         Location returnTo = detachPlayer(dungeon, player);
-        restoreGameMode(player, previous);
-        player.teleport(safeLocation(returnTo));
+        sendToSafety(player, returnTo);
         player.sendMessage("You have left the dungeon.");
         disposeIfEmpty(dungeon);
     }
 
     /**
-     * Handles a player disconnecting while inside a dungeon: restore their game
-     * mode, drop them from the instance, and dispose it if now empty.
+     * Handles a player disconnecting while inside a dungeon: drop them from the
+     * instance and dispose it (next tick, once they have fully left the world).
      */
     public void handleQuit(Player player) {
         Dungeon dungeon = instanceByPlayer.get(player.getUniqueId());
         if (dungeon == null) {
             return;
         }
-        GameMode previous = dungeon.getReturnGameMode(player.getUniqueId());
         detachPlayer(dungeon, player);
-        restoreGameMode(player, previous);
-        // Dispose next tick, once the quitting player has fully left the world
-        // (unloading a world with players still in it fails).
+        player.setGameMode(GameMode.SURVIVAL);
         Bukkit.getScheduler().runTask(plugin, () -> disposeIfEmpty(dungeon));
     }
 
     /**
      * Handles a player dying inside a dungeon: the run ends, they keep what they
-     * found, and they respawn back in the main world.
+     * found (via the world's keep-inventory rule), and they respawn back in the
+     * main world.
      *
      * @return the location the player should respawn at, or {@code null} if they
      *         were not in a dungeon
@@ -122,12 +120,11 @@ public class DungeonManager {
         if (dungeon == null) {
             return null;
         }
-        GameMode previous = dungeon.getReturnGameMode(player.getUniqueId());
         Location returnTo = detachPlayer(dungeon, player);
-        // Restore game mode and dispose next tick, after the respawn has moved
+        // Restore survival and dispose next tick, after the respawn has moved
         // the player out into the main world.
         Bukkit.getScheduler().runTask(plugin, () -> {
-            restoreGameMode(player, previous);
+            player.setGameMode(GameMode.SURVIVAL);
             disposeIfEmpty(dungeon);
         });
         return safeLocation(returnTo);
@@ -136,16 +133,6 @@ public class DungeonManager {
     /** @return {@code true} if the player is currently inside a dungeon instance. */
     public boolean isParticipant(Player player) {
         return instanceByPlayer.containsKey(player.getUniqueId());
-    }
-
-    /** @return {@code true} if the world is a live dungeon instance world. */
-    public boolean isDungeonWorld(World world) {
-        for (Dungeon dungeon : instancesById.values()) {
-            if (dungeon.getWorld().equals(world)) {
-                return true;
-            }
-        }
-        return false;
     }
 
     /** Disposes every active instance, returning players to safety. Call on disable. */
@@ -186,7 +173,7 @@ public class DungeonManager {
     }
 
     private void addPlayer(Dungeon dungeon, Player player, Location returnLocation) {
-        dungeon.addPlayer(player.getUniqueId(), returnLocation, player.getGameMode());
+        dungeon.addPlayer(player.getUniqueId(), returnLocation);
         instanceByPlayer.put(player.getUniqueId(), dungeon);
 
         Location spawn = dungeon.getGrid().getSpawn();
@@ -209,10 +196,31 @@ public class DungeonManager {
         }
     }
 
-    /** Advances any instance whose player is standing on the emerald checkpoint. */
-    private void checkCheckpoints() {
+    /**
+     * Each tick: detach anyone who has left their instance's world by other
+     * means, then advance any instance whose player is standing on the emerald.
+     */
+    private void tickInstances() {
         for (Dungeon dungeon : new ArrayList<>(instancesById.values())) {
-            if (dungeon.getState() != State.ACTIVE || dungeon.getGrid() == null || dungeon.isExtending()) {
+            if (dungeon.getState() != State.ACTIVE || dungeon.getGrid() == null) {
+                continue;
+            }
+
+            // A participant who is no longer in the instance world (e.g. /spawn)
+            // has effectively left; drop them so the instance can be disposed.
+            for (UUID playerId : dungeon.getPlayers()) {
+                Player player = Bukkit.getPlayer(playerId);
+                if (player != null && !player.getWorld().equals(dungeon.getWorld())) {
+                    detachPlayer(dungeon, player);
+                    player.setGameMode(GameMode.SURVIVAL);
+                }
+            }
+            if (dungeon.isEmpty()) {
+                disposeInstance(dungeon);
+                continue;
+            }
+
+            if (dungeon.isExtending()) {
                 continue;
             }
             for (UUID playerId : dungeon.getPlayers()) {
@@ -249,19 +257,14 @@ public class DungeonManager {
         }
     }
 
-    /**
-     * Returns any remaining players to safety (restoring game mode), then deletes
-     * the world.
-     */
+    /** Returns any remaining players to safety, then deletes the world. */
     private void disposeInstance(Dungeon dungeon) {
         for (UUID playerId : dungeon.getPlayers()) {
             Player player = Bukkit.getPlayer(playerId);
-            GameMode previous = dungeon.getReturnGameMode(playerId);
             Location returnTo = dungeon.getReturnLocation(playerId);
             instanceByPlayer.remove(playerId);
             if (player != null) {
-                restoreGameMode(player, previous);
-                player.teleport(safeLocation(returnTo));
+                sendToSafety(player, returnTo);
             }
         }
         dungeon.setState(State.OFF);
@@ -300,8 +303,10 @@ public class DungeonManager {
         return offHand == null || offHand.getType() == Material.AIR;
     }
 
-    private void restoreGameMode(Player player, GameMode previous) {
-        player.setGameMode(previous != null ? previous : GameMode.SURVIVAL);
+    /** Teleports a player to safety in survival mode. */
+    private void sendToSafety(Player player, Location returnTo) {
+        player.setGameMode(GameMode.SURVIVAL);
+        player.teleport(safeLocation(returnTo));
     }
 
     private Location safeLocation(Location returnTo) {
