@@ -1,14 +1,12 @@
 package com.jliii.theatriadungeoncrawler.util.runnables;
 
 import com.google.common.base.Preconditions;
-import lombok.AllArgsConstructor;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
 import org.bukkit.World;
 
 import java.util.UUID;
 
-@AllArgsConstructor
 public class BlockPlacementWorkload implements Workload {
 
     private final UUID worldID;
@@ -17,6 +15,14 @@ public class BlockPlacementWorkload implements Workload {
     private final int blockZ;
     private final Material material;
 //    private Player player;
+
+    public BlockPlacementWorkload(UUID worldID, int blockX, int blockY, int blockZ, Material material) {
+        this.worldID = worldID;
+        this.blockX = blockX;
+        this.blockY = blockY;
+        this.blockZ = blockZ;
+        this.material = material;
+    }
 
     /*
      * This method is called when the workload is executed - specifically when setting blocks.

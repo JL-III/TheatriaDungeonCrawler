@@ -2,7 +2,6 @@ package com.jliii.theatriadungeoncrawler.util.runnables;
 
 import com.google.common.base.Preconditions;
 import com.jliii.theatriadungeoncrawler.templates.DungeonTemplate;
-import lombok.AllArgsConstructor;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
@@ -11,11 +10,14 @@ import org.bukkit.util.Vector;
 
 import java.util.*;
 
-@AllArgsConstructor
 public class DistributedWorkload {
 
     private final WorkloadRunnable workloadRunnable;
 //    private Player player;
+
+    public DistributedWorkload(WorkloadRunnable workloadRunnable) {
+        this.workloadRunnable = workloadRunnable;
+    }
 
     public void createRoom(Location cornerA, Location cornerB, DungeonTemplate.DungeonType dungeonType) {
         Preconditions.checkArgument(cornerA.getWorld() == cornerB.getWorld() && cornerA.getWorld() != null);
