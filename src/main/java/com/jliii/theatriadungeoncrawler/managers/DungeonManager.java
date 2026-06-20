@@ -7,10 +7,13 @@ import com.jliii.theatriadungeoncrawler.objects.Dungeon;
 import com.jliii.theatriadungeoncrawler.objects.DungeonGrid;
 import com.jliii.theatriadungeoncrawler.templates.DungeonTemplate;
 import org.bukkit.Bukkit;
+import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.entity.Player;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.PlayerInventory;
 import org.bukkit.plugin.Plugin;
 
 import java.util.ArrayList;
@@ -21,12 +24,11 @@ import java.util.UUID;
 
 /**
  * Owns the lifecycle of dungeon instances: one void world per run, into which an
- * infinite sliding-window dungeon is generated and grown.
+ * infinite, segment-by-segment dungeon is generated and grown.
  *
- * <p>Each player gets their own instance world (Phase 1). Stepping on the
- * emerald checkpoint <em>advances</em> the same world — building the next room
- * and trimming the oldest — rather than creating a new world, so the server is
- * not churning worlds as the player progresses.</p>
+ * <p>Players enter empty-handed and in adventure mode (so they can't break the
+ * dungeon), and keep whatever they find — including on death, where they are
+ * returned to the main world with their loot and experience intact.</p>
  */
 public class DungeonManager {
 
@@ -45,7 +47,8 @@ public class DungeonManager {
     }
 
     /**
-     * Starts a new endless dungeon for the player, remembering where they came
+     * Starts a new endless dungeon for the player. Requires an empty inventory
+     * and armor so nothing brought in can be lost, and remembers where they came
      * from. If they are already in a dungeon they are removed from it first.
      *
      * @param fixedSegmentLength forces the rooms-per-segment count; pass a value
@@ -56,6 +59,11 @@ public class DungeonManager {
             leaveDungeon(player);
         }
 
+        if (!isInventoryEmpty(player)) {
+            player.sendMessage("Empty your inventory and armor before entering the dungeon.");
+            return;
+        }
+
         Dungeon dungeon = createInstance(fixedSegmentLength, theme);
         if (dungeon == null) {
             player.sendMessage("Failed to create the dungeon world. Try again.");
@@ -63,45 +71,74 @@ public class DungeonManager {
         }
 
         addPlayer(dungeon, player, player.getLocation());
-        player.sendMessage("Entering an endless dungeon. Follow the lit trail to the emerald checkpoint at the end of each stretch of rooms.");
+        player.sendMessage("Entering an endless dungeon. Reach the emerald checkpoint at the end of each stretch of rooms.");
     }
 
     /**
      * Removes the player from their current dungeon and returns them to where
-     * they entered from. Disposes the instance once it is empty.
+     * they entered from, restoring their game mode. Disposes the instance once
+     * it is empty.
      */
     public void leaveDungeon(Player player) {
-        Dungeon dungeon = instanceByPlayer.remove(player.getUniqueId());
+        Dungeon dungeon = instanceByPlayer.get(player.getUniqueId());
         if (dungeon == null) {
             player.sendMessage("You are not in a dungeon.");
             return;
         }
-        Location returnTo = dungeon.removePlayer(player.getUniqueId());
-        teleportToSafety(player, returnTo);
+        GameMode previous = dungeon.getReturnGameMode(player.getUniqueId());
+        Location returnTo = detachPlayer(dungeon, player);
+        restoreGameMode(player, previous);
+        player.teleport(safeLocation(returnTo));
         player.sendMessage("You have left the dungeon.");
-        if (dungeon.isEmpty()) {
-            disposeInstance(dungeon);
-        }
+        disposeIfEmpty(dungeon);
     }
 
     /**
-     * Handles a player disconnecting while inside a dungeon: drop them from the
-     * instance (disposing it if empty) so the world can be cleaned up.
+     * Handles a player disconnecting while inside a dungeon: restore their game
+     * mode, drop them from the instance, and dispose it if now empty.
      */
-    public void handleQuit(UUID playerId) {
-        Dungeon dungeon = instanceByPlayer.remove(playerId);
+    public void handleQuit(Player player) {
+        Dungeon dungeon = instanceByPlayer.get(player.getUniqueId());
         if (dungeon == null) {
             return;
         }
-        dungeon.removePlayer(playerId);
-        if (dungeon.isEmpty()) {
-            disposeInstance(dungeon);
-        }
+        GameMode previous = dungeon.getReturnGameMode(player.getUniqueId());
+        detachPlayer(dungeon, player);
+        restoreGameMode(player, previous);
+        // Dispose next tick, once the quitting player has fully left the world
+        // (unloading a world with players still in it fails).
+        Bukkit.getScheduler().runTask(plugin, () -> disposeIfEmpty(dungeon));
     }
 
     /**
-     * @return {@code true} if the world is a live dungeon instance world.
+     * Handles a player dying inside a dungeon: the run ends, they keep what they
+     * found, and they respawn back in the main world.
+     *
+     * @return the location the player should respawn at, or {@code null} if they
+     *         were not in a dungeon
      */
+    public Location handleDeath(Player player) {
+        Dungeon dungeon = instanceByPlayer.get(player.getUniqueId());
+        if (dungeon == null) {
+            return null;
+        }
+        GameMode previous = dungeon.getReturnGameMode(player.getUniqueId());
+        Location returnTo = detachPlayer(dungeon, player);
+        // Restore game mode and dispose next tick, after the respawn has moved
+        // the player out into the main world.
+        Bukkit.getScheduler().runTask(plugin, () -> {
+            restoreGameMode(player, previous);
+            disposeIfEmpty(dungeon);
+        });
+        return safeLocation(returnTo);
+    }
+
+    /** @return {@code true} if the player is currently inside a dungeon instance. */
+    public boolean isParticipant(Player player) {
+        return instanceByPlayer.containsKey(player.getUniqueId());
+    }
+
+    /** @return {@code true} if the world is a live dungeon instance world. */
     public boolean isDungeonWorld(World world) {
         for (Dungeon dungeon : instancesById.values()) {
             if (dungeon.getWorld().equals(world)) {
@@ -120,10 +157,6 @@ public class DungeonManager {
 
     // --- internals ---------------------------------------------------------
 
-    /**
-     * Creates the world, schedules its build queue, generates the initial path,
-     * and registers the instance. Does not add any players.
-     */
     private Dungeon createInstance(int fixedSegmentLength, DungeonTemplate.DungeonType theme) {
         World world = WorldFactory.createInstanceWorld();
         if (world == null) {
@@ -153,13 +186,27 @@ public class DungeonManager {
     }
 
     private void addPlayer(Dungeon dungeon, Player player, Location returnLocation) {
-        dungeon.addPlayer(player.getUniqueId(), returnLocation);
+        dungeon.addPlayer(player.getUniqueId(), returnLocation, player.getGameMode());
         instanceByPlayer.put(player.getUniqueId(), dungeon);
 
         Location spawn = dungeon.getGrid().getSpawn();
         spawn.setYaw(player.getLocation().getYaw());
         spawn.setPitch(player.getLocation().getPitch());
         player.teleport(spawn);
+        // Adventure mode prevents breaking or placing the dungeon's blocks.
+        player.setGameMode(GameMode.ADVENTURE);
+    }
+
+    /** Removes a player from an instance, returning their stored return location. */
+    private Location detachPlayer(Dungeon dungeon, Player player) {
+        instanceByPlayer.remove(player.getUniqueId());
+        return dungeon.removePlayer(player.getUniqueId());
+    }
+
+    private void disposeIfEmpty(Dungeon dungeon) {
+        if (dungeon.isEmpty()) {
+            disposeInstance(dungeon);
+        }
     }
 
     /** Advances any instance whose player is standing on the emerald checkpoint. */
@@ -178,7 +225,7 @@ public class DungeonManager {
         }
     }
 
-    /** Extends the dungeon one room past the checkpoint the player just reached. */
+    /** Extends the dungeon a whole segment past the checkpoint the player reached. */
     private void advanceDungeon(Dungeon dungeon) {
         dungeon.setExtending(true);
         try {
@@ -189,7 +236,7 @@ public class DungeonManager {
             String direction = grid.getLastExitDirection();
             String message = extended
                     ? "Checkpoint reached! The path opens to the "
-                            + (direction != null ? direction : "unknown") + " — follow the lit trail."
+                            + (direction != null ? direction : "unknown") + "."
                     : "The dungeon cannot extend any further from here.";
             for (UUID playerId : dungeon.getPlayers()) {
                 Player player = Bukkit.getPlayer(playerId);
@@ -203,15 +250,18 @@ public class DungeonManager {
     }
 
     /**
-     * Returns any remaining players to safety, then deletes the world.
+     * Returns any remaining players to safety (restoring game mode), then deletes
+     * the world.
      */
     private void disposeInstance(Dungeon dungeon) {
         for (UUID playerId : dungeon.getPlayers()) {
             Player player = Bukkit.getPlayer(playerId);
+            GameMode previous = dungeon.getReturnGameMode(playerId);
             Location returnTo = dungeon.getReturnLocation(playerId);
             instanceByPlayer.remove(playerId);
             if (player != null) {
-                teleportToSafety(player, returnTo);
+                restoreGameMode(player, previous);
+                player.teleport(safeLocation(returnTo));
             }
         }
         dungeon.setState(State.OFF);
@@ -234,13 +284,32 @@ public class DungeonManager {
         }
     }
 
-    private void teleportToSafety(Player player, Location returnTo) {
+    private boolean isInventoryEmpty(Player player) {
+        PlayerInventory inventory = player.getInventory();
+        for (ItemStack item : inventory.getStorageContents()) {
+            if (item != null && item.getType() != Material.AIR) {
+                return false;
+            }
+        }
+        for (ItemStack item : inventory.getArmorContents()) {
+            if (item != null && item.getType() != Material.AIR) {
+                return false;
+            }
+        }
+        ItemStack offHand = inventory.getItemInOffHand();
+        return offHand == null || offHand.getType() == Material.AIR;
+    }
+
+    private void restoreGameMode(Player player, GameMode previous) {
+        player.setGameMode(previous != null ? previous : GameMode.SURVIVAL);
+    }
+
+    private Location safeLocation(Location returnTo) {
         if (returnTo != null && returnTo.getWorld() != null
                 && !returnTo.getWorld().getName().startsWith(WorldFactory.INSTANCE_WORLD_PREFIX)) {
-            player.teleport(returnTo);
-        } else {
-            player.teleport(mainWorldSpawn());
+            return returnTo;
         }
+        return mainWorldSpawn();
     }
 
     private Location mainWorldSpawn() {

@@ -3,6 +3,7 @@ package com.jliii.theatriadungeoncrawler.objects;
 import com.jliii.theatriadungeoncrawler.enums.State;
 import com.jliii.theatriadungeoncrawler.templates.DungeonTemplate;
 import com.jliii.theatriadungeoncrawler.util.runnables.WorkloadRunnable;
+import org.bukkit.GameMode;
 import org.bukkit.Location;
 import org.bukkit.World;
 
@@ -26,6 +27,7 @@ public class Dungeon {
     private final WorkloadRunnable workloadRunnable = new WorkloadRunnable();
     private final List<UUID> players = new ArrayList<>();
     private final Map<UUID, Location> returnLocations = new HashMap<>();
+    private final Map<UUID, GameMode> returnGameModes = new HashMap<>();
 
     private final World world;
     private final int fixedSegmentLength;
@@ -42,11 +44,12 @@ public class Dungeon {
         this.theme = theme;
     }
 
-    public void addPlayer(UUID uuid, Location returnLocation) {
+    public void addPlayer(UUID uuid, Location returnLocation, GameMode returnGameMode) {
         if (!players.contains(uuid)) {
             players.add(uuid);
         }
         returnLocations.put(uuid, returnLocation);
+        returnGameModes.put(uuid, returnGameMode);
     }
 
     /**
@@ -57,7 +60,12 @@ public class Dungeon {
      */
     public Location removePlayer(UUID uuid) {
         players.remove(uuid);
+        returnGameModes.remove(uuid);
         return returnLocations.remove(uuid);
+    }
+
+    public GameMode getReturnGameMode(UUID uuid) {
+        return returnGameModes.get(uuid);
     }
 
     public List<UUID> getPlayers() {

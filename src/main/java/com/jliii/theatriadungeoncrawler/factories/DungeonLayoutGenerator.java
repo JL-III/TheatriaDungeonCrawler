@@ -6,10 +6,12 @@ import com.jliii.theatriadungeoncrawler.templates.DungeonTemplate;
 import com.jliii.theatriadungeoncrawler.util.Coord;
 import com.jliii.theatriadungeoncrawler.util.runnables.BlockPlacementWorkload;
 import com.jliii.theatriadungeoncrawler.util.runnables.DistributedWorkload;
+import com.jliii.theatriadungeoncrawler.util.runnables.WallTorchWorkload;
 import com.jliii.theatriadungeoncrawler.util.runnables.WorkloadRunnable;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
+import org.bukkit.block.BlockFace;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -19,6 +21,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Random;
 import java.util.Set;
+import java.util.UUID;
 
 /**
  * Generates and grows an infinite dungeon into a void world, one segment at a time.
@@ -43,8 +46,8 @@ import java.util.Set;
  * <h2>Dead-end avoidance &amp; wayfinding</h2>
  * The growth direction is chosen like a snake game: a bounded flood fill over
  * free chunks rejects directions that would box the dungeon into a dead end.
- * Each room is given a glowing floor trail toward its exit, and each checkpoint
- * records the cardinal direction it opened toward.
+ * Door openings are lit with wall torches, and each checkpoint records the
+ * cardinal direction it opened toward (announced to the player).
  *
  * <p>All block edits are queued onto the instance's {@link WorkloadRunnable},
  * which spreads them across ticks to avoid stalling the server.</p>
@@ -75,8 +78,6 @@ public class DungeonLayoutGenerator {
     private static final Material GOAL_MARKER = Material.EMERALD_BLOCK;
     /** Block that replaces a consumed emerald checkpoint. */
     private static final Material FLOOR_MATERIAL = Material.STONE_BRICKS;
-    /** Glowing block used to mark the floor trail toward each room's exit. */
-    private static final Material TRAIL_MATERIAL = Material.SEA_LANTERN;
 
     private static final int[][] DIRS = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
 
@@ -174,7 +175,6 @@ public class DungeonLayoutGenerator {
                 break;
             }
             RoomNode node = extendRoom(grid, cur.getChunk(), dir, themeFor(grid.getTheme(), random));
-            layTrail(grid, cur.getChunk(), dir);
             if (cur == start) {
                 grid.setLastExitDirection(cardinal(dir));
             }
@@ -208,6 +208,8 @@ public class DungeonLayoutGenerator {
         workload.fillHollowCorridor(c.corridorMin, c.corridorMax, CORRIDOR_MATERIAL);
         carveOpen(c.toDoorMin, c.toDoorMax);     // new room's incoming door
         carveOpen(c.fromDoorMin, c.fromDoorMax); // from room's outgoing door (gated last)
+        placeDoorTorches(grid, from, dir);                            // light the exit door
+        placeDoorTorches(grid, c.to, new int[]{-dir[0], -dir[1]});   // light the entrance door
 
         grid.markOccupied(c.to);
         return new RoomNode(c.to, theme, box[0], box[1],
@@ -392,16 +394,34 @@ public class DungeonLayoutGenerator {
         workloadRunnable.addWorkload(new BlockPlacementWorkload(world.getUID(), cx, grid.getOriginY(), cz, FLOOR_MATERIAL));
     }
 
-    /** Lays a glowing floor trail from a room's centre toward its exit door. */
-    private void layTrail(DungeonGrid grid, Coord cell, int[] dir) {
-        int oy = grid.getOriginY();
-        int cx = centerX(cell);
-        int cz = centerZ(cell);
-        int steps = FOOT / 2 - 1; // from just past the centre up to the wall
-        for (int i = 1; i <= steps; i++) {
-            int x = cx + dir[0] * i;
-            int z = cz + dir[1] * i;
-            workloadRunnable.addWorkload(new BlockPlacementWorkload(world.getUID(), x, oy, z, TRAIL_MATERIAL));
+    /**
+     * Places a pair of wall torches flanking the door in {@code cell}'s wall on
+     * the {@code exitDir} side, mounted on the wall and facing into the room.
+     */
+    private void placeDoorTorches(DungeonGrid grid, Coord cell, int[] exitDir) {
+        int torchY = grid.getOriginY() + 2;
+        int dx = exitDir[0];
+        int dz = exitDir[1];
+        int minX = roomMinX(cell);
+        int maxX = minX + FOOT - 1;
+        int minZ = roomMinZ(cell);
+        int maxZ = minZ + FOOT - 1;
+        UUID w = world.getUID();
+
+        if (dx != 0) {
+            int wallX = dx > 0 ? maxX : minX;
+            int torchX = wallX - dx; // one block into the room from the wall
+            int zc = centerZ(cell);
+            BlockFace facing = dx > 0 ? BlockFace.WEST : BlockFace.EAST;
+            workloadRunnable.addWorkload(new WallTorchWorkload(w, torchX, torchY, zc - 2, facing));
+            workloadRunnable.addWorkload(new WallTorchWorkload(w, torchX, torchY, zc + 2, facing));
+        } else {
+            int wallZ = dz > 0 ? maxZ : minZ;
+            int torchZ = wallZ - dz;
+            int xc = centerX(cell);
+            BlockFace facing = dz > 0 ? BlockFace.NORTH : BlockFace.SOUTH;
+            workloadRunnable.addWorkload(new WallTorchWorkload(w, xc - 2, torchY, torchZ, facing));
+            workloadRunnable.addWorkload(new WallTorchWorkload(w, xc + 2, torchY, torchZ, facing));
         }
     }
 

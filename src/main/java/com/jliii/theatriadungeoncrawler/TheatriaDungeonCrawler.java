@@ -2,6 +2,7 @@ package com.jliii.theatriadungeoncrawler;
 
 import com.jliii.theatriadungeoncrawler.commands.Box;
 import com.jliii.theatriadungeoncrawler.commands.DungeonCommands;
+import com.jliii.theatriadungeoncrawler.listeners.DungeonProtectionListener;
 import com.jliii.theatriadungeoncrawler.listeners.PlayerConnectionListener;
 import com.jliii.theatriadungeoncrawler.managers.DungeonManager;
 import com.jliii.theatriadungeoncrawler.util.runnables.WorkloadRunnable;
@@ -26,6 +27,7 @@ public final class TheatriaDungeonCrawler extends JavaPlugin {
         Bukkit.getScheduler().runTaskTimer(this, this.workloadRunnable, 1, 1);
 
         Bukkit.getPluginManager().registerEvents(new PlayerConnectionListener(dungeonManager), this);
+        Bukkit.getPluginManager().registerEvents(new DungeonProtectionListener(dungeonManager), this);
         Objects.requireNonNull(Bukkit.getPluginCommand("dungeons"))
                 .setExecutor(new DungeonCommands(this, dungeonManager));
         Objects.requireNonNull(Bukkit.getPluginCommand("box"))
