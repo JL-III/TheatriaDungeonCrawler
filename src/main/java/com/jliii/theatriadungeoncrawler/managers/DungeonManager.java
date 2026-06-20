@@ -149,12 +149,12 @@ public class DungeonManager {
 
         // Each instance builds on its own queue so instances never block each other.
         int buildTaskId = Bukkit.getScheduler()
-                .runTaskTimer(plugin, dungeon.getWorkloadRunnable(), 1L, 1L)
+                .runTaskTimer(plugin, dungeon.getWorkloadQueue(), 1L, 1L)
                 .getTaskId();
         dungeon.setBuildTaskId(buildTaskId);
 
         Location origin = new Location(world, 0, ORIGIN_Y, 0);
-        DungeonLayoutGenerator generator = new DungeonLayoutGenerator(world, dungeon.getWorkloadRunnable());
+        DungeonLayoutGenerator generator = new DungeonLayoutGenerator(world, dungeon.getWorkloadQueue());
         DungeonGrid grid = generator.generateInitial(origin, fixedSegmentLength, theme, random);
         dungeon.setGrid(grid);
         dungeon.setState(State.ACTIVE);
@@ -213,7 +213,7 @@ public class DungeonManager {
             }
 
             // Let players know the area is still being built.
-            if (dungeon.getWorkloadRunnable().isBusy()) {
+            if (dungeon.getWorkloadQueue().isBusy()) {
                 for (UUID playerId : dungeon.getPlayers()) {
                     Player player = Bukkit.getPlayer(playerId);
                     if (player != null) {
@@ -241,7 +241,7 @@ public class DungeonManager {
         try {
             DungeonGrid grid = dungeon.getGrid();
             DungeonLayoutGenerator generator =
-                    new DungeonLayoutGenerator(grid.getWorld(), dungeon.getWorkloadRunnable());
+                    new DungeonLayoutGenerator(grid.getWorld(), dungeon.getWorkloadQueue());
             boolean extended = generator.advance(grid, random);
             String direction = grid.getLastExitDirection();
             String message = extended

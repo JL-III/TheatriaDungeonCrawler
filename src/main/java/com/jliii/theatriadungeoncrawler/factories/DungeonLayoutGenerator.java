@@ -5,9 +5,9 @@ import com.jliii.theatriadungeoncrawler.objects.RoomNode;
 import com.jliii.theatriadungeoncrawler.templates.DungeonTemplate;
 import com.jliii.theatriadungeoncrawler.util.Coord;
 import com.jliii.theatriadungeoncrawler.util.runnables.BlockPlacementWorkload;
-import com.jliii.theatriadungeoncrawler.util.runnables.DistributedWorkload;
+import com.jliii.theatriadungeoncrawler.util.runnables.DungeonBuilder;
 import com.jliii.theatriadungeoncrawler.util.runnables.WallTorchWorkload;
-import com.jliii.theatriadungeoncrawler.util.runnables.WorkloadRunnable;
+import com.jliii.theatriadungeoncrawler.util.runnables.WorkloadQueue;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
@@ -49,7 +49,7 @@ import java.util.UUID;
  * Door openings are lit with wall torches, and each checkpoint records the
  * cardinal direction it opened toward (announced to the player).
  *
- * <p>All block edits are queued onto the instance's {@link WorkloadRunnable},
+ * <p>All block edits are queued onto the instance's {@link WorkloadQueue},
  * which spreads them across ticks to avoid stalling the server.</p>
  */
 public class DungeonLayoutGenerator {
@@ -82,13 +82,13 @@ public class DungeonLayoutGenerator {
     private static final int[][] DIRS = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
 
     private final World world;
-    private final WorkloadRunnable workloadRunnable;
-    private final DistributedWorkload workload;
+    private final WorkloadQueue workloadQueue;
+    private final DungeonBuilder workload;
 
-    public DungeonLayoutGenerator(World world, WorkloadRunnable workloadRunnable) {
+    public DungeonLayoutGenerator(World world, WorkloadQueue workloadQueue) {
         this.world = world;
-        this.workloadRunnable = workloadRunnable;
-        this.workload = new DistributedWorkload(workloadRunnable);
+        this.workloadQueue = workloadQueue;
+        this.workload = new DungeonBuilder(workloadQueue);
     }
 
     /**
@@ -386,14 +386,14 @@ public class DungeonLayoutGenerator {
         int cx = centerX(cell);
         int cz = centerZ(cell);
         int oy = grid.getOriginY();
-        workloadRunnable.addWorkload(new BlockPlacementWorkload(world.getUID(), cx, oy, cz, GOAL_MARKER));
+        workloadQueue.addWorkload(new BlockPlacementWorkload(world.getUID(), cx, oy, cz, GOAL_MARKER));
         grid.setEmeraldLocation(new Location(world, cx, oy, cz));
     }
 
     private void removeEmerald(DungeonGrid grid, Coord cell) {
         int cx = centerX(cell);
         int cz = centerZ(cell);
-        workloadRunnable.addWorkload(new BlockPlacementWorkload(world.getUID(), cx, grid.getOriginY(), cz, FLOOR_MATERIAL));
+        workloadQueue.addWorkload(new BlockPlacementWorkload(world.getUID(), cx, grid.getOriginY(), cz, FLOOR_MATERIAL));
     }
 
     /**
@@ -415,15 +415,15 @@ public class DungeonLayoutGenerator {
             int torchX = wallX - dx; // one block into the room, against the wall
             int zc = centerZ(cell);
             BlockFace facing = dx > 0 ? BlockFace.WEST : BlockFace.EAST;
-            workloadRunnable.addWorkload(new WallTorchWorkload(w, torchX, torchY, zc - 2, facing));
-            workloadRunnable.addWorkload(new WallTorchWorkload(w, torchX, torchY, zc + 2, facing));
+            workloadQueue.addWorkload(new WallTorchWorkload(w, torchX, torchY, zc - 2, facing));
+            workloadQueue.addWorkload(new WallTorchWorkload(w, torchX, torchY, zc + 2, facing));
         } else {
             int wallZ = dz > 0 ? maxZ : minZ;
             int torchZ = wallZ - dz;
             int xc = centerX(cell);
             BlockFace facing = dz > 0 ? BlockFace.NORTH : BlockFace.SOUTH;
-            workloadRunnable.addWorkload(new WallTorchWorkload(w, xc - 2, torchY, torchZ, facing));
-            workloadRunnable.addWorkload(new WallTorchWorkload(w, xc + 2, torchY, torchZ, facing));
+            workloadQueue.addWorkload(new WallTorchWorkload(w, xc - 2, torchY, torchZ, facing));
+            workloadQueue.addWorkload(new WallTorchWorkload(w, xc + 2, torchY, torchZ, facing));
         }
     }
 

@@ -2,7 +2,7 @@ package com.jliii.theatriadungeoncrawler.objects;
 
 import com.jliii.theatriadungeoncrawler.enums.State;
 import com.jliii.theatriadungeoncrawler.templates.DungeonTemplate;
-import com.jliii.theatriadungeoncrawler.util.runnables.WorkloadRunnable;
+import com.jliii.theatriadungeoncrawler.util.runnables.WorkloadQueue;
 import org.bukkit.Location;
 import org.bukkit.World;
 
@@ -16,14 +16,14 @@ import java.util.UUID;
  * A single, isolated dungeon instance: its own void world, generated layout,
  * the players inside it, and the lifecycle {@link State} it is in.
  *
- * <p>Each instance owns a {@link WorkloadRunnable} so its world can build
+ * <p>Each instance owns a {@link WorkloadQueue} so its world can build
  * independently of every other instance, and remembers where each player came
  * from so they can be returned when the instance is disposed.</p>
  */
 public class Dungeon {
 
     private final UUID dungeonUUID = UUID.randomUUID();
-    private final WorkloadRunnable workloadRunnable = new WorkloadRunnable();
+    private final WorkloadQueue workloadQueue = new WorkloadQueue();
     private final List<UUID> players = new ArrayList<>();
     private final Map<UUID, Location> returnLocations = new HashMap<>();
 
@@ -88,8 +88,8 @@ public class Dungeon {
         return theme;
     }
 
-    public WorkloadRunnable getWorkloadRunnable() {
-        return workloadRunnable;
+    public WorkloadQueue getWorkloadQueue() {
+        return workloadQueue;
     }
 
     public DungeonGrid getGrid() {

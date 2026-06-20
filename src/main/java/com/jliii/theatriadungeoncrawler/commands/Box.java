@@ -4,8 +4,8 @@ import com.jliii.theatriadungeoncrawler.TheatriaDungeonCrawler;
 import com.jliii.theatriadungeoncrawler.factories.DungeonLayoutGenerator;
 import com.jliii.theatriadungeoncrawler.factories.WorldFactory;
 import com.jliii.theatriadungeoncrawler.objects.Room;
-import com.jliii.theatriadungeoncrawler.util.runnables.DistributedWorkload;
-import com.jliii.theatriadungeoncrawler.util.runnables.WorkloadRunnable;
+import com.jliii.theatriadungeoncrawler.util.runnables.DungeonBuilder;
+import com.jliii.theatriadungeoncrawler.util.runnables.WorkloadQueue;
 import com.jliii.theatriadungeoncrawler.templates.DungeonTemplate;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -22,12 +22,12 @@ import java.util.Random;
 public class Box implements CommandExecutor {
 
     private TheatriaDungeonCrawler plugin;
-    private WorkloadRunnable workloadRunnable;
+    private WorkloadQueue workloadQueue;
     private List<Room> rooms = new ArrayList<>();
 
-    public Box(TheatriaDungeonCrawler plugin, WorkloadRunnable workloadRunnable) {
+    public Box(TheatriaDungeonCrawler plugin, WorkloadQueue workloadQueue) {
         this.plugin = plugin;
-        this.workloadRunnable = workloadRunnable;
+        this.workloadQueue = workloadQueue;
     }
 
     @Override
@@ -56,17 +56,17 @@ public class Box implements CommandExecutor {
         }
 
         if (args[0].equalsIgnoreCase("next")) {
-            workloadRunnable.executeNextWorkload();
+            workloadQueue.executeNextWorkload();
             return true;
         }
 
         if (args[0].equalsIgnoreCase("play")) {
-            workloadRunnable.setManualExecution(false);
+            workloadQueue.setManualExecution(false);
             return true;
         }
 
         if (args[0].equalsIgnoreCase("pause")) {
-            workloadRunnable.setManualExecution(true);
+            workloadQueue.setManualExecution(true);
             return true;
         }
 
@@ -91,8 +91,8 @@ public class Box implements CommandExecutor {
             Location cornerA = player.getLocation().add(1, 0, 1); // Add an offset to not spawn the box inside the player
             Location cornerB = cornerA.clone().add(length, height, width);
 
-//            new DistributedWorkload(this.workloadRunnable).createRoom(cornerA, cornerB, dungeonType);
-//            Room2 room = new Room2(cornerA, cornerB, workloadRunnable);
+//            new DungeonBuilder(this.workloadQueue).createRoom(cornerA, cornerB, dungeonType);
+//            Room2 room = new Room2(cornerA, cornerB, workloadQueue);
 //            rooms.add(room);
 //            player.sendMessage("Created a themed hollow box. Entry point: " + room.getEntryPoint() + ", Corridor connection point: " + room.getCorridorConnectionPoint());
             return true;
@@ -121,8 +121,8 @@ public class Box implements CommandExecutor {
             Location cornerA = player.getLocation().add(1, 0, 1); // Add an offset to not spawn the box inside the player
             Location cornerB = cornerA.clone().add(length, height, width);
 
-            new DistributedWorkload(this.workloadRunnable).fillObstacleCourse(cornerA, cornerB, dungeonType);
-            Room room = new Room(cornerA, cornerB, workloadRunnable);
+            new DungeonBuilder(this.workloadQueue).fillObstacleCourse(cornerA, cornerB, dungeonType);
+            Room room = new Room(cornerA, cornerB, workloadQueue);
             rooms.add(room);
             player.sendMessage("Created a themed hollow box. Entry point: " + room.getEntryPoint() + ", Corridor connection point: " + room.getCorridorConnectionPoint());
             return true;
@@ -175,7 +175,7 @@ public class Box implements CommandExecutor {
 
         Location origin = new Location(world, 0, 64, 0);
 
-        DungeonLayoutGenerator generator = new DungeonLayoutGenerator(world, workloadRunnable);
+        DungeonLayoutGenerator generator = new DungeonLayoutGenerator(world, workloadQueue);
         Location spawn = generator.generateInitial(origin, roomCount, theme, new Random()).getSpawn();
 
         // Drop an immediate safe platform under the spawn so the player doesn't
@@ -188,7 +188,7 @@ public class Box implements CommandExecutor {
         }
 
         // Build the queued blocks automatically (rather than waiting for /box play).
-        workloadRunnable.setManualExecution(false);
+        workloadQueue.setManualExecution(false);
 
         spawn.setYaw(player.getLocation().getYaw());
         spawn.setPitch(player.getLocation().getPitch());
@@ -231,7 +231,7 @@ public class Box implements CommandExecutor {
         }
 
         // Create the corridor
-        new DistributedWorkload(this.workloadRunnable).fillHollowCorridor(corridorStart, corridorEnd, corridorMaterial);
+        new DungeonBuilder(this.workloadQueue).fillHollowCorridor(corridorStart, corridorEnd, corridorMaterial);
         player.sendMessage("Created a corridor with " + corridorMaterial.name() + " connecting to the room.");
     }
 

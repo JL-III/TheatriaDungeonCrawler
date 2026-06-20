@@ -1,6 +1,6 @@
 package com.jliii.theatriadungeoncrawler.objects;
 
-import com.jliii.theatriadungeoncrawler.util.runnables.WorkloadRunnable;
+import com.jliii.theatriadungeoncrawler.util.runnables.WorkloadQueue;
 import org.bukkit.Location;
 import org.bukkit.World;
 
@@ -14,12 +14,12 @@ public class Room {
     private final Location cornerB;
     private Location entryPoint;
     private Location corridorConnectionPoint;
-    private WorkloadRunnable workloadRunnable;
+    private WorkloadQueue workloadQueue;
 
-    public Room(Location cornerA, Location cornerB, WorkloadRunnable workloadRunnable) {
+    public Room(Location cornerA, Location cornerB, WorkloadQueue workloadQueue) {
         this.cornerA = cornerA;
         this.cornerB = cornerB;
-        this.workloadRunnable = workloadRunnable;
+        this.workloadQueue = workloadQueue;
         generateEntryAndCorridorPoints();
     }
 

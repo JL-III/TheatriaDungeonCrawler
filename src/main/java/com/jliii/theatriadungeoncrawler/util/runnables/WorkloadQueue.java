@@ -3,7 +3,7 @@ package com.jliii.theatriadungeoncrawler.util.runnables;
 import java.util.ArrayDeque;
 import java.util.Deque;
 
-public class WorkloadRunnable implements Runnable {
+public class WorkloadQueue implements Runnable {
 
     private static final double MAX_MILLIS_PER_TICK = 1;
     private static final int MAX_NANOS_PER_TICK = (int) (MAX_MILLIS_PER_TICK * 1E6);
