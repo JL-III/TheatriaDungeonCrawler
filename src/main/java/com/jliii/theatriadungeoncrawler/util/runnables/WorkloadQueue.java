@@ -5,7 +5,8 @@ import java.util.Deque;
 
 public class WorkloadQueue implements Runnable {
 
-    private static final double MAX_MILLIS_PER_TICK = 1;
+    /** Max wall-clock spent placing blocks per tick, per instance queue. */
+    private static final double MAX_MILLIS_PER_TICK = 0.5;
     private static final int MAX_NANOS_PER_TICK = (int) (MAX_MILLIS_PER_TICK * 1E6);
 
     private final Deque<Workload> workloadDeque = new ArrayDeque<>();

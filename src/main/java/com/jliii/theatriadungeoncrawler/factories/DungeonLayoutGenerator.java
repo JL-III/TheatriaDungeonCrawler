@@ -62,15 +62,15 @@ public class DungeonLayoutGenerator {
     private static final int FOOT = CHUNK - 2 * MARGIN; // 12
     /** Room height, walls included. */
     private static final int HEIGHT = 6;
-    /** Corridor tube height. */
-    private static final int CORRIDOR_HEIGHT = 5;
-    /** Outer corridor width (box); its interior is two narrower than this. */
-    private static final int CORRIDOR_WIDTH = 5;
-    /** Door opening width (must be odd to centre on a wall). Matches the
-     *  corridor interior ({@code CORRIDOR_WIDTH - 2}) so the doorway is uniform. */
-    private static final int DOOR_WIDTH = 3;
+    /** Bridge tube height (floor + door + ceiling). */
+    private static final int CORRIDOR_HEIGHT = 4;
+    /** Outer bridge width (box); its interior is two narrower than this. */
+    private static final int CORRIDOR_WIDTH = 3;
+    /** Door opening width (odd, centred). Matches the bridge interior
+     *  ({@code CORRIDOR_WIDTH - 2}) so the doorway is uniform. */
+    private static final int DOOR_WIDTH = 1;
     /** Door opening height. */
-    private static final int DOOR_HEIGHT = 3;
+    private static final int DOOR_HEIGHT = 2;
     /** Minimum free chunks reachable from a candidate for it to be "safe". */
     private static final int SAFETY_CELLS = 16;
     /** A segment is this many rooms (inclusive bounds) ending in a checkpoint. */

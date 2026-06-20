@@ -17,8 +17,9 @@ import java.util.UUID;
  */
 public class BatchedRegionWorkload implements Workload {
 
-    /** Block positions visited per {@link #compute()} call. */
-    private static final int BATCH = 1024;
+    /** Block positions visited per {@link #compute()} call. Kept small so a
+     *  single compute stays well under the per-tick budget for fine control. */
+    private static final int BATCH = 256;
 
     private final UUID worldID;
     private final int minX;
