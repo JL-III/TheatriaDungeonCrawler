@@ -73,7 +73,8 @@ public class BatchedRegionWorkload implements Workload {
                     || z == minZ || z == maxZ;
             if (!shellOnly || edge) {
                 Material mat = material != null ? material : DungeonTemplate.getRandomMaterial(theme);
-                world.getBlockAt(x, y, z).setType(mat, false);
+                // applyPhysics=true so lighting recalculates (rooms stay lit).
+                world.getBlockAt(x, y, z).setType(mat, true);
             }
             processed++;
             advanceCursor();

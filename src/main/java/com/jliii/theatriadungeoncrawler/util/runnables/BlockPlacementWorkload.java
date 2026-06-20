@@ -27,8 +27,8 @@ public class BlockPlacementWorkload implements Workload {
     public boolean compute() {
         World world = Bukkit.getWorld(this.worldID);
         Preconditions.checkState(world != null);
-        // applyPhysics=false avoids physics/redundant-update cost on each block.
-        world.getBlockAt(this.blockX, this.blockY, this.blockZ).setType(this.material, false);
+        // applyPhysics=true so lighting recalculates (rooms stay lit).
+        world.getBlockAt(this.blockX, this.blockY, this.blockZ).setType(this.material, true);
         return true;
     }
 }

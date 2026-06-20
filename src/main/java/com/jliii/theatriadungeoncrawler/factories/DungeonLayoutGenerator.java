@@ -208,7 +208,8 @@ public class DungeonLayoutGenerator {
         workload.fillHollowCorridor(c.corridorMin, c.corridorMax, CORRIDOR_MATERIAL);
         carveOpen(c.toDoorMin, c.toDoorMax);     // new room's incoming door
         carveOpen(c.fromDoorMin, c.fromDoorMax); // from room's outgoing door (gated last)
-        placeCorridorTorches(grid, c);           // light the connecting corridor
+        placeDoorTorches(grid, from, dir);                          // light the exit doorway
+        placeDoorTorches(grid, c.to, new int[]{-dir[0], -dir[1]});  // light the entrance doorway
 
         grid.markOccupied(c.to);
         return new RoomNode(c.to, theme, box[0], box[1],
@@ -396,29 +397,33 @@ public class DungeonLayoutGenerator {
     }
 
     /**
-     * Mounts a wall torch near each end of the corridor (one by each doorway) on
-     * the corridor's stone-brick side wall, so the connectors between rooms are
-     * lit. The torches sit on the corridor wall, never on a room wall, so they
-     * are removed cleanly with the corridor and never left floating.
+     * Mounts a pair of wall torches against the room wall, flanking the doorway
+     * on the {@code exitDir} side and facing into the room.
      */
-    private void placeCorridorTorches(DungeonGrid grid, Connection c) {
-        int minX = c.corridorMin.getBlockX();
-        int maxX = c.corridorMax.getBlockX();
-        int minZ = c.corridorMin.getBlockZ();
-        int maxZ = c.corridorMax.getBlockZ();
-        int y = c.corridorMin.getBlockY() + 2;
+    private void placeDoorTorches(DungeonGrid grid, Coord cell, int[] exitDir) {
+        int torchY = grid.getOriginY() + 2;
+        int dx = exitDir[0];
+        int dz = exitDir[1];
+        int minX = roomMinX(cell);
+        int maxX = minX + FOOT - 1;
+        int minZ = roomMinZ(cell);
+        int maxZ = minZ + FOOT - 1;
         UUID w = world.getUID();
 
-        if (maxX - minX >= maxZ - minZ) {
-            // East/West corridor: mount on the north side wall, facing into it.
-            int torchZ = minZ + 1;
-            workloadRunnable.addWorkload(new WallTorchWorkload(w, minX + 1, y, torchZ, BlockFace.SOUTH));
-            workloadRunnable.addWorkload(new WallTorchWorkload(w, maxX - 1, y, torchZ, BlockFace.SOUTH));
+        if (dx != 0) {
+            int wallX = dx > 0 ? maxX : minX;
+            int torchX = wallX - dx; // one block into the room, against the wall
+            int zc = centerZ(cell);
+            BlockFace facing = dx > 0 ? BlockFace.WEST : BlockFace.EAST;
+            workloadRunnable.addWorkload(new WallTorchWorkload(w, torchX, torchY, zc - 2, facing));
+            workloadRunnable.addWorkload(new WallTorchWorkload(w, torchX, torchY, zc + 2, facing));
         } else {
-            // North/South corridor: mount on the west side wall.
-            int torchX = minX + 1;
-            workloadRunnable.addWorkload(new WallTorchWorkload(w, torchX, y, minZ + 1, BlockFace.EAST));
-            workloadRunnable.addWorkload(new WallTorchWorkload(w, torchX, y, maxZ - 1, BlockFace.EAST));
+            int wallZ = dz > 0 ? maxZ : minZ;
+            int torchZ = wallZ - dz;
+            int xc = centerX(cell);
+            BlockFace facing = dz > 0 ? BlockFace.NORTH : BlockFace.SOUTH;
+            workloadRunnable.addWorkload(new WallTorchWorkload(w, xc - 2, torchY, torchZ, facing));
+            workloadRunnable.addWorkload(new WallTorchWorkload(w, xc + 2, torchY, torchZ, facing));
         }
     }
 
