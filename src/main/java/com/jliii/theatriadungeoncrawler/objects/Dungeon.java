@@ -28,16 +28,17 @@ public class Dungeon {
     private final Map<UUID, Location> returnLocations = new HashMap<>();
 
     private final World world;
-    private final int roomCount;
+    private final int windowSize;
     private final DungeonTemplate.DungeonType theme;
 
-    private DungeonLayout layout;
+    private DungeonGrid grid;
     private State state = State.STARTING;
     private int buildTaskId = -1;
+    private boolean extending = false;
 
-    public Dungeon(World world, int roomCount, DungeonTemplate.DungeonType theme) {
+    public Dungeon(World world, int windowSize, DungeonTemplate.DungeonType theme) {
         this.world = world;
-        this.roomCount = roomCount;
+        this.windowSize = windowSize;
         this.theme = theme;
     }
 
@@ -79,8 +80,8 @@ public class Dungeon {
         return world;
     }
 
-    public int getRoomCount() {
-        return roomCount;
+    public int getWindowSize() {
+        return windowSize;
     }
 
     public DungeonTemplate.DungeonType getTheme() {
@@ -91,12 +92,20 @@ public class Dungeon {
         return workloadRunnable;
     }
 
-    public DungeonLayout getLayout() {
-        return layout;
+    public DungeonGrid getGrid() {
+        return grid;
     }
 
-    public void setLayout(DungeonLayout layout) {
-        this.layout = layout;
+    public void setGrid(DungeonGrid grid) {
+        this.grid = grid;
+    }
+
+    public boolean isExtending() {
+        return extending;
+    }
+
+    public void setExtending(boolean extending) {
+        this.extending = extending;
     }
 
     public State getState() {

@@ -1,6 +1,7 @@
 package com.jliii.theatriadungeoncrawler.factories;
 
-import com.jliii.theatriadungeoncrawler.objects.DungeonLayout;
+import com.jliii.theatriadungeoncrawler.objects.DungeonGrid;
+import com.jliii.theatriadungeoncrawler.objects.RoomNode;
 import com.jliii.theatriadungeoncrawler.templates.DungeonTemplate;
 import com.jliii.theatriadungeoncrawler.util.Coord;
 import com.jliii.theatriadungeoncrawler.util.runnables.BlockPlacementWorkload;
@@ -10,46 +11,67 @@ import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.Collections;
+import java.util.Deque;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Random;
 import java.util.Set;
 
 /**
- * Generates a procedural dungeon layout into a void world.
+ * Generates and grows an infinite, sliding-window dungeon into a void world.
  *
- * <p>Rooms are laid out on a fixed grid. Starting from a single room the
- * generator grows a randomly-shaped, fully connected tree of rooms: each new
- * room is attached to an existing one via a corridor, so every room is
- * reachable and no two rooms overlap.</p>
+ * <p>Rooms are aligned one-per-chunk on a single Y plane. The active rooms form
+ * a path (the "snake body") capped at {@link DungeonGrid#getWindow()} rooms:
+ * {@link #advance} adds a room at the head and trims the tail, so the dungeon
+ * extends forever with a bounded block footprint.</p>
  *
- * <p>All block placement is queued onto the shared {@link WorkloadRunnable},
- * which spreads the work across ticks to avoid stalling the server. Work is
- * enqueued in three passes — rooms, then corridors, then doorways — so that
- * the doorway carves (which overwrite wall blocks with air) always run after
- * the walls they punch through have been placed.</p>
+ * <h2>Checkpoint ("loading room") mechanic</h2>
+ * The head room holds an emerald checkpoint and has exactly one open door (the
+ * way in). When the player steps on the emerald, {@link #advance}:
+ * <ol>
+ *   <li>seals the door behind the player,</li>
+ *   <li>builds the next room and corridor, opening the forward door <em>last</em>
+ *       so — because the build queue is FIFO — it only opens once the new room
+ *       has finished building,</li>
+ *   <li>moves the emerald into the new head room, and</li>
+ *   <li>removes the oldest room, freeing its chunk.</li>
+ * </ol>
+ *
+ * <h2>Dead-end avoidance</h2>
+ * The growth direction is chosen like a snake game: a bounded flood fill over
+ * free chunks rejects directions that would box the dungeon into a dead end.
+ *
+ * <p>All block edits are queued onto the instance's {@link WorkloadRunnable},
+ * which spreads them across ticks to avoid stalling the server.</p>
  */
 public class DungeonLayoutGenerator {
 
-    /** Footprint (x and z) of a room, walls included, in blocks. */
-    private static final int ROOM_FOOTPRINT = 9;
-    /** Interior height of a room, walls included, in blocks. */
-    private static final int ROOM_HEIGHT = 6;
-    /** Length of the corridor gap between two adjacent rooms, in blocks. */
-    private static final int CORRIDOR_GAP = 5;
-    /** Width of a corridor (and of the doorways it connects to), in blocks. */
-    private static final int CORRIDOR_WIDTH = 3;
-    /** Height of a corridor tube, in blocks. */
+    /** Chunk size in blocks; each room occupies one chunk cell. */
+    private static final int CHUNK = 16;
+    /** Empty border between a room's walls and the chunk edge. */
+    private static final int MARGIN = 2;
+    /** Room footprint (x and z), walls included. */
+    private static final int FOOT = CHUNK - 2 * MARGIN; // 12
+    /** Room height, walls included. */
+    private static final int HEIGHT = 6;
+    /** Corridor tube height. */
     private static final int CORRIDOR_HEIGHT = 5;
-    /** Centre-to-centre distance between adjacent grid cells, in blocks. */
-    private static final int CELL_PITCH = ROOM_FOOTPRINT + CORRIDOR_GAP;
+    /** Door / corridor width (must be odd so it centres on a wall). */
+    private static final int DOOR_WIDTH = 3;
+    /** Door opening height. */
+    private static final int DOOR_HEIGHT = 3;
+    /** Minimum free chunks reachable from a candidate for it to be "safe". */
+    private static final int SAFETY_CELLS = 16;
 
     private static final Material CORRIDOR_MATERIAL = Material.STONE_BRICKS;
-    /** Block placed on the exit room floor to mark the dungeon's goal. */
     private static final Material GOAL_MARKER = Material.EMERALD_BLOCK;
+    /** Block that replaces a consumed emerald checkpoint. */
+    private static final Material FLOOR_MATERIAL = Material.STONE_BRICKS;
+
+    private static final int[][] DIRS = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
 
     private final World world;
     private final WorkloadRunnable workloadRunnable;
@@ -62,207 +84,334 @@ public class DungeonLayoutGenerator {
     }
 
     /**
-     * Generates a connected dungeon of {@code roomCount} rooms anchored at
-     * {@code origin} (the lowest corner of the starting room).
+     * Builds the initial path of {@code window} rooms anchored at {@code origin},
+     * ending in the emerald checkpoint (loading) room.
      *
-     * @param origin    lowest (min-x, min-y, min-z) corner of the start room
-     * @param roomCount desired number of rooms (at least one)
-     * @param theme     the theme to build every room with, or {@code null} to
-     *                  pick a fresh random theme per room
-     * @param random    randomness source driving layout and themes
-     * @return the spawn point and exit-room region of the generated dungeon
+     * @param origin lowest corner of the start room's chunk (its Y is the floor)
+     * @param window number of rooms kept alive at once (clamped to at least 2)
+     * @param theme  fixed theme for every room, or {@code null} for random
+     * @return the dungeon's growing layout state
      */
-    public DungeonLayout generate(Location origin, int roomCount, DungeonTemplate.DungeonType theme, Random random) {
-        int originX = origin.getBlockX();
-        int originY = origin.getBlockY();
-        int originZ = origin.getBlockZ();
+    public DungeonGrid generateInitial(Location origin, int window, DungeonTemplate.DungeonType theme, Random random) {
+        int w = Math.max(2, window);
+        DungeonGrid grid = new DungeonGrid(world, origin.getBlockY(), theme, w);
 
-        Map<Coord, DungeonTemplate.DungeonType> rooms = new HashMap<>();
-        List<Coord[]> corridors = new ArrayList<>();
-        growLayout(Math.max(1, roomCount), rooms, corridors, theme, random);
+        Coord start = new Coord(0, 0);
+        DungeonTemplate.DungeonType startTheme = themeFor(theme, random);
+        Location[] startBox = roomBox(grid, start);
+        workload.createRoom(startBox[0], startBox[1], startTheme);
+        grid.markOccupied(start);
+        grid.getPath().addLast(new RoomNode(start, startTheme, startBox[0], startBox[1], null, null, null, null));
+        grid.setSpawn(spawnLocation(grid, start));
 
-        // Pass 1: rooms.
-        for (Map.Entry<Coord, DungeonTemplate.DungeonType> entry : rooms.entrySet()) {
-            buildRoom(entry.getKey(), originX, originY, originZ, entry.getValue());
-        }
-        // Pass 2: corridors connecting adjacent rooms.
-        for (Coord[] edge : corridors) {
-            buildCorridor(edge[0], edge[1], originX, originY, originZ);
-        }
-        // Pass 3: doorways carved through the shared walls (air overwrites walls).
-        for (Coord[] edge : corridors) {
-            carveDoorways(edge[0], edge[1], originX, originY, originZ);
-        }
-
-        // The exit is the room farthest from the start, marked with a goal block.
-        Coord exitCell = farthestCell(rooms.keySet());
-        markGoal(exitCell, originX, originY, originZ);
-
-        // Spawn standing on the floor in the centre of the start room.
-        double spawnX = originX + ROOM_FOOTPRINT / 2.0;
-        double spawnZ = originZ + ROOM_FOOTPRINT / 2.0;
-        Location spawn = new Location(world, spawnX, originY + 1, spawnZ);
-
-        return new DungeonLayout(spawn, exitInteriorMin(exitCell, originX, originY, originZ),
-                exitInteriorMax(exitCell, originX, originY, originZ));
-    }
-
-    /** Returns the placed cell with the greatest grid distance from the start. */
-    private Coord farthestCell(Set<Coord> cells) {
-        Coord best = new Coord(0, 0);
-        int bestDistance = -1;
-        for (Coord cell : cells) {
-            int distance = Math.abs(cell.getX()) + Math.abs(cell.getZ());
-            if (distance > bestDistance) {
-                bestDistance = distance;
-                best = cell;
+        Coord cur = start;
+        while (grid.getPath().size() < w) {
+            int[] dir = pickDirection(grid, cur, random);
+            if (dir == null) {
+                break;
             }
+            RoomNode node = extendRoom(grid, cur, dir, themeFor(theme, random));
+            grid.getPath().addLast(node);
+            cur = node.getChunk();
         }
-        return best;
-    }
 
-    private void markGoal(Coord cell, int originX, int originY, int originZ) {
-        int cx = originX + cell.getX() * CELL_PITCH + ROOM_FOOTPRINT / 2;
-        int cz = originZ + cell.getZ() * CELL_PITCH + ROOM_FOOTPRINT / 2;
-        // Enqueued after the room floor so it overwrites the centre floor block.
-        workloadRunnable.addWorkload(new BlockPlacementWorkload(world.getUID(), cx, originY, cz, GOAL_MARKER));
-    }
-
-    private Location exitInteriorMin(Coord cell, int originX, int originY, int originZ) {
-        int minX = originX + cell.getX() * CELL_PITCH;
-        int minZ = originZ + cell.getZ() * CELL_PITCH;
-        return new Location(world, minX + 1, originY + 1, minZ + 1);
-    }
-
-    private Location exitInteriorMax(Coord cell, int originX, int originY, int originZ) {
-        int minX = originX + cell.getX() * CELL_PITCH;
-        int minZ = originZ + cell.getZ() * CELL_PITCH;
-        return new Location(world,
-                minX + ROOM_FOOTPRINT - 2,
-                originY + ROOM_HEIGHT - 2,
-                minZ + ROOM_FOOTPRINT - 2);
+        placeEmerald(grid, cur);
+        return grid;
     }
 
     /**
-     * Grows a connected tree of grid cells via randomized accretion: repeatedly
-     * pick an existing cell and try to attach an un-placed orthogonal neighbour.
+     * Advances the dungeon one room when the player reaches the checkpoint:
+     * seals behind, builds and opens the way to a new head room, moves the
+     * emerald forward, and trims the tail.
+     *
+     * @return {@code true} if the dungeon was extended; {@code false} only if the
+     *         head was somehow boxed in (effectively never on an open plane)
      */
-    private void growLayout(int roomCount,
-                            Map<Coord, DungeonTemplate.DungeonType> rooms,
-                            List<Coord[]> corridors,
-                            DungeonTemplate.DungeonType theme,
-                            Random random) {
-        int[][] directions = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
+    public boolean advance(DungeonGrid grid, Random random) {
+        RoomNode head = grid.getPath().peekLast();
+        if (head == null) {
+            return false;
+        }
+        Coord headChunk = head.getChunk();
 
-        Coord start = new Coord(0, 0);
-        Set<Coord> placed = new HashSet<>();
-        List<Coord> frontier = new ArrayList<>();
-        placed.add(start);
-        frontier.add(start);
-        rooms.put(start, themeFor(theme, random));
+        // 1. Seal the door behind the player.
+        if (head.hasDoor()) {
+            closeFill(head.getDoorMin(), head.getDoorMax(), doorMaterial(head.getTheme()));
+        }
+        // 2. Consume the emerald (immediate feedback) before the new one appears.
+        removeEmerald(grid, headChunk);
 
-        int maxAttempts = roomCount * 50;
-        int attempts = 0;
-        while (placed.size() < roomCount && attempts < maxAttempts) {
-            attempts++;
-            Coord from = frontier.get(random.nextInt(frontier.size()));
-            int[] dir = directions[random.nextInt(directions.length)];
-            Coord to = new Coord(from.getX() + dir[0], from.getZ() + dir[1]);
-            if (placed.contains(to)) {
+        // 3. Pick a snake-safe direction and build the next head room. The
+        //    forward door is carved last (inside extendRoom), so it only opens
+        //    once the new room has finished building.
+        int[] dir = pickDirection(grid, headChunk, random);
+        if (dir == null) {
+            return false;
+        }
+        RoomNode node = extendRoom(grid, headChunk, dir, themeFor(grid.getTheme(), random));
+
+        // 4. Emerald moves into the new head room.
+        placeEmerald(grid, node.getChunk());
+
+        // 5. Append the new head and trim the tail to keep the window bounded.
+        grid.getPath().addLast(node);
+        while (grid.getPath().size() > grid.getWindow()) {
+            removeTail(grid);
+        }
+        return true;
+    }
+
+    // --- room / corridor construction -------------------------------------
+
+    /**
+     * Builds the room adjacent to {@code from} in direction {@code dir}, the
+     * corridor between them, and carves both doorways (the new room's incoming
+     * door, then the {@code from} room's outgoing door last). Marks the new
+     * chunk occupied and returns its node.
+     */
+    private RoomNode extendRoom(DungeonGrid grid, Coord from, int[] dir, DungeonTemplate.DungeonType theme) {
+        Connection c = connection(grid, from, dir[0], dir[1]);
+        Location[] box = roomBox(grid, c.to);
+
+        workload.createRoom(box[0], box[1], theme);
+        workload.fillHollowCorridor(c.corridorMin, c.corridorMax, CORRIDOR_MATERIAL);
+        carveOpen(c.toDoorMin, c.toDoorMax);     // new room's incoming door
+        carveOpen(c.fromDoorMin, c.fromDoorMax); // from room's outgoing door (gated last)
+
+        grid.markOccupied(c.to);
+        return new RoomNode(c.to, theme, box[0], box[1],
+                c.corridorMin, c.corridorMax, c.toDoorMin, c.toDoorMax);
+    }
+
+    /** Clears the tail room (and its corridors), freeing its chunk for reuse. */
+    private void removeTail(DungeonGrid grid) {
+        RoomNode tail = grid.getPath().pollFirst();
+        if (tail == null) {
+            return;
+        }
+        clearBox(tail.getRoomMin(), tail.getRoomMax());
+        if (tail.hasCorridor()) {
+            clearBox(tail.getCorridorMin(), tail.getCorridorMax());
+        }
+        // Also clear the corridor stub joining the removed tail to the new tail.
+        RoomNode successor = grid.getPath().peekFirst();
+        if (successor != null && successor.hasCorridor()) {
+            clearBox(successor.getCorridorMin(), successor.getCorridorMax());
+            successor.clearCorridor();
+        }
+        grid.freeChunk(tail.getChunk());
+    }
+
+    // --- direction choice (snake dead-end avoidance) ----------------------
+
+    /**
+     * Chooses a free neighbouring chunk to grow into, preferring directions with
+     * enough open space ahead (flood fill) so the dungeon cannot trap itself.
+     *
+     * @return the chosen direction, or {@code null} if every neighbour is occupied
+     */
+    private int[] pickDirection(DungeonGrid grid, Coord head, Random random) {
+        List<int[]> dirs = new ArrayList<>();
+        Collections.addAll(dirs, DIRS);
+        Collections.shuffle(dirs, random);
+
+        int[] best = null;
+        int bestReach = -1;
+        for (int[] d : dirs) {
+            Coord candidate = new Coord(head.getX() + d[0], head.getZ() + d[1]);
+            if (grid.isOccupied(candidate)) {
                 continue;
             }
-            placed.add(to);
-            frontier.add(to);
-            rooms.put(to, themeFor(theme, random));
-            corridors.add(new Coord[]{from, to});
+            int reach = floodReach(grid, candidate);
+            if (reach >= SAFETY_CELLS) {
+                return d; // safe enough; random order keeps it varied
+            }
+            if (reach > bestReach) {
+                bestReach = reach;
+                best = d;
+            }
+        }
+        return best; // least-bad free direction, or null if fully boxed in
+    }
+
+    /**
+     * Counts free chunks reachable from {@code start} (capped at
+     * {@link #SAFETY_CELLS}). The tail chunk is treated as free because it is
+     * released when the dungeon advances.
+     */
+    private int floodReach(DungeonGrid grid, Coord start) {
+        Set<Coord> blocked = new HashSet<>(grid.getOccupiedChunks());
+        if (grid.getPath().size() >= grid.getWindow()) {
+            RoomNode tail = grid.getPath().peekFirst();
+            if (tail != null) {
+                blocked.remove(tail.getChunk());
+            }
+        }
+
+        Set<Coord> visited = new HashSet<>();
+        Deque<Coord> queue = new ArrayDeque<>();
+        queue.add(start);
+        int count = 0;
+        while (!queue.isEmpty() && count < SAFETY_CELLS) {
+            Coord c = queue.poll();
+            if (visited.contains(c) || blocked.contains(c)) {
+                continue;
+            }
+            visited.add(c);
+            count++;
+            for (int[] d : DIRS) {
+                Coord n = new Coord(c.getX() + d[0], c.getZ() + d[1]);
+                if (!visited.contains(n) && !blocked.contains(n)) {
+                    queue.add(n);
+                }
+            }
+        }
+        return count;
+    }
+
+    // --- geometry ---------------------------------------------------------
+
+    private int roomMinX(Coord cell) {
+        return cell.getX() * CHUNK + MARGIN;
+    }
+
+    private int roomMinZ(Coord cell) {
+        return cell.getZ() * CHUNK + MARGIN;
+    }
+
+    private int centerX(Coord cell) {
+        return roomMinX(cell) + FOOT / 2;
+    }
+
+    private int centerZ(Coord cell) {
+        return roomMinZ(cell) + FOOT / 2;
+    }
+
+    private Location[] roomBox(DungeonGrid grid, Coord cell) {
+        int oy = grid.getOriginY();
+        int minX = roomMinX(cell);
+        int minZ = roomMinZ(cell);
+        Location min = new Location(world, minX, oy, minZ);
+        Location max = new Location(world, minX + FOOT - 1, oy + HEIGHT - 1, minZ + FOOT - 1);
+        return new Location[]{min, max};
+    }
+
+    private Location spawnLocation(DungeonGrid grid, Coord cell) {
+        return new Location(world, centerX(cell) + 0.5, grid.getOriginY() + 1, centerZ(cell) + 0.5);
+    }
+
+    /**
+     * Computes the corridor box and the two doorway boxes between {@code from}
+     * and its neighbour in direction (dx, dz).
+     */
+    private Connection connection(DungeonGrid grid, Coord from, int dx, int dz) {
+        int oy = grid.getOriginY();
+        Coord to = new Coord(from.getX() + dx, from.getZ() + dz);
+
+        int fMinX = roomMinX(from);
+        int fMaxX = fMinX + FOOT - 1;
+        int fMinZ = roomMinZ(from);
+        int fMaxZ = fMinZ + FOOT - 1;
+        int tMinX = roomMinX(to);
+        int tMaxX = tMinX + FOOT - 1;
+        int tMinZ = roomMinZ(to);
+        int tMaxZ = tMinZ + FOOT - 1;
+
+        int half = DOOR_WIDTH / 2;
+        int doorTop = oy + DOOR_HEIGHT;        // door spans oy+1 .. oy+DOOR_HEIGHT
+        int corrTop = oy + CORRIDOR_HEIGHT - 1;
+
+        if (dz == 0) {
+            // East/West: corridor along X, centred on Z.
+            int zc = fMinZ + FOOT / 2;
+            int fWallX = (dx == 1) ? fMaxX : fMinX;
+            int tWallX = (dx == 1) ? tMinX : tMaxX;
+            int loX = Math.min(fWallX, tWallX);
+            int hiX = Math.max(fWallX, tWallX);
+            return new Connection(to,
+                    new Location(world, loX, oy, zc - half),
+                    new Location(world, hiX, corrTop, zc + half),
+                    new Location(world, fWallX, oy + 1, zc - half),
+                    new Location(world, fWallX, doorTop, zc + half),
+                    new Location(world, tWallX, oy + 1, zc - half),
+                    new Location(world, tWallX, doorTop, zc + half));
+        } else {
+            // North/South: corridor along Z, centred on X.
+            int xc = fMinX + FOOT / 2;
+            int fWallZ = (dz == 1) ? fMaxZ : fMinZ;
+            int tWallZ = (dz == 1) ? tMinZ : tMaxZ;
+            int loZ = Math.min(fWallZ, tWallZ);
+            int hiZ = Math.max(fWallZ, tWallZ);
+            return new Connection(to,
+                    new Location(world, xc - half, oy, loZ),
+                    new Location(world, xc + half, corrTop, hiZ),
+                    new Location(world, xc - half, oy + 1, fWallZ),
+                    new Location(world, xc + half, doorTop, fWallZ),
+                    new Location(world, xc - half, oy + 1, tWallZ),
+                    new Location(world, xc + half, doorTop, tWallZ));
         }
     }
+
+    // --- block operations (queued) ----------------------------------------
+
+    private void placeEmerald(DungeonGrid grid, Coord cell) {
+        int cx = centerX(cell);
+        int cz = centerZ(cell);
+        int oy = grid.getOriginY();
+        workloadRunnable.addWorkload(new BlockPlacementWorkload(world.getUID(), cx, oy, cz, GOAL_MARKER));
+        grid.setEmeraldLocation(new Location(world, cx, oy, cz));
+    }
+
+    private void removeEmerald(DungeonGrid grid, Coord cell) {
+        int cx = centerX(cell);
+        int cz = centerZ(cell);
+        workloadRunnable.addWorkload(new BlockPlacementWorkload(world.getUID(), cx, grid.getOriginY(), cz, FLOOR_MATERIAL));
+    }
+
+    private void carveOpen(Location min, Location max) {
+        workload.fillSolidBox(min, max, Material.AIR);
+    }
+
+    private void closeFill(Location min, Location max, Material material) {
+        workload.fillSolidBox(min, max, material);
+    }
+
+    private void clearBox(Location min, Location max) {
+        workload.fillSolidBox(min, max, Material.AIR);
+    }
+
+    // --- helpers ----------------------------------------------------------
 
     private DungeonTemplate.DungeonType themeFor(DungeonTemplate.DungeonType theme, Random random) {
         return theme != null ? theme : DungeonTemplate.getRandomTheme();
     }
 
-    private void buildRoom(Coord cell, int originX, int originY, int originZ, DungeonTemplate.DungeonType theme) {
-        int minX = originX + cell.getX() * CELL_PITCH;
-        int minZ = originZ + cell.getZ() * CELL_PITCH;
-        Location cornerA = new Location(world, minX, originY, minZ);
-        Location cornerB = new Location(world,
-                minX + ROOM_FOOTPRINT - 1,
-                originY + ROOM_HEIGHT - 1,
-                minZ + ROOM_FOOTPRINT - 1);
-        workload.createRoom(cornerA, cornerB, theme);
+    private Material doorMaterial(DungeonTemplate.DungeonType theme) {
+        DungeonTemplate.DungeonType t = theme != null ? theme : DungeonTemplate.getRandomTheme();
+        return DungeonTemplate.getRandomMaterial(t);
     }
 
-    /**
-     * Builds a hollow corridor tube spanning the gap between two adjacent rooms,
-     * butting up against the wall of each.
-     */
-    private void buildCorridor(Coord a, Coord b, int originX, int originY, int originZ) {
-        int aMinX = originX + a.getX() * CELL_PITCH;
-        int aMinZ = originZ + a.getZ() * CELL_PITCH;
-        int bMinX = originX + b.getX() * CELL_PITCH;
-        int bMinZ = originZ + b.getZ() * CELL_PITCH;
-        int half = CORRIDOR_WIDTH / 2;
+    /** Immutable bundle of the boxes that make up a room-to-room connection. */
+    private static final class Connection {
+        private final Coord to;
+        private final Location corridorMin;
+        private final Location corridorMax;
+        private final Location fromDoorMin;
+        private final Location fromDoorMax;
+        private final Location toDoorMin;
+        private final Location toDoorMax;
 
-        Location start;
-        Location end;
-        if (a.getZ() == b.getZ()) {
-            // Neighbours along the x axis.
-            int lowMinX = Math.min(aMinX, bMinX);
-            int highMinX = Math.max(aMinX, bMinX);
-            int zCentre = aMinZ + ROOM_FOOTPRINT / 2;
-            start = new Location(world, lowMinX + ROOM_FOOTPRINT - 1, originY, zCentre - half);
-            end = new Location(world, highMinX, originY + CORRIDOR_HEIGHT - 1, zCentre + half);
-        } else {
-            // Neighbours along the z axis.
-            int lowMinZ = Math.min(aMinZ, bMinZ);
-            int highMinZ = Math.max(aMinZ, bMinZ);
-            int xCentre = aMinX + ROOM_FOOTPRINT / 2;
-            start = new Location(world, xCentre - half, originY, lowMinZ + ROOM_FOOTPRINT - 1);
-            end = new Location(world, xCentre + half, originY + CORRIDOR_HEIGHT - 1, highMinZ);
+        private Connection(Coord to,
+                           Location corridorMin, Location corridorMax,
+                           Location fromDoorMin, Location fromDoorMax,
+                           Location toDoorMin, Location toDoorMax) {
+            this.to = to;
+            this.corridorMin = corridorMin;
+            this.corridorMax = corridorMax;
+            this.fromDoorMin = fromDoorMin;
+            this.fromDoorMax = fromDoorMax;
+            this.toDoorMin = toDoorMin;
+            this.toDoorMax = toDoorMax;
         }
-        workload.fillHollowCorridor(start, end, CORRIDOR_MATERIAL);
-    }
-
-    /**
-     * Carves an air doorway through each room wall (and the corridor end caps)
-     * where the corridor meets it, leaving the floor intact.
-     */
-    private void carveDoorways(Coord a, Coord b, int originX, int originY, int originZ) {
-        int aMinX = originX + a.getX() * CELL_PITCH;
-        int aMinZ = originZ + a.getZ() * CELL_PITCH;
-        int bMinX = originX + b.getX() * CELL_PITCH;
-        int bMinZ = originZ + b.getZ() * CELL_PITCH;
-        int half = CORRIDOR_WIDTH / 2;
-        int doorTop = originY + CORRIDOR_HEIGHT - 2; // leave the corridor ceiling in place
-
-        if (a.getZ() == b.getZ()) {
-            int lowMinX = Math.min(aMinX, bMinX);
-            int highMinX = Math.max(aMinX, bMinX);
-            int zCentre = aMinZ + ROOM_FOOTPRINT / 2;
-            int wallA = lowMinX + ROOM_FOOTPRINT - 1; // +x wall of the lower room
-            int wallB = highMinX;                     // -x wall of the higher room
-            carveAir(wallA, originY + 1, zCentre - half, wallA, doorTop, zCentre + half);
-            carveAir(wallB, originY + 1, zCentre - half, wallB, doorTop, zCentre + half);
-        } else {
-            int lowMinZ = Math.min(aMinZ, bMinZ);
-            int highMinZ = Math.max(aMinZ, bMinZ);
-            int xCentre = aMinX + ROOM_FOOTPRINT / 2;
-            int wallA = lowMinZ + ROOM_FOOTPRINT - 1; // +z wall of the lower room
-            int wallB = highMinZ;                     // -z wall of the higher room
-            carveAir(xCentre - half, originY + 1, wallA, xCentre + half, doorTop, wallA);
-            carveAir(xCentre - half, originY + 1, wallB, xCentre + half, doorTop, wallB);
-        }
-    }
-
-    private void carveAir(int x1, int y1, int z1, int x2, int y2, int z2) {
-        workload.fillSolidBox(
-                new Location(world, x1, y1, z1),
-                new Location(world, x2, y2, z2),
-                Material.AIR);
-    }
-
-    public WorkloadRunnable getWorkloadRunnable() {
-        return workloadRunnable;
     }
 }

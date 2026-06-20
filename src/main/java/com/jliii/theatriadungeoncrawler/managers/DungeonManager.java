@@ -4,7 +4,7 @@ import com.jliii.theatriadungeoncrawler.enums.State;
 import com.jliii.theatriadungeoncrawler.factories.DungeonLayoutGenerator;
 import com.jliii.theatriadungeoncrawler.factories.WorldFactory;
 import com.jliii.theatriadungeoncrawler.objects.Dungeon;
-import com.jliii.theatriadungeoncrawler.objects.DungeonLayout;
+import com.jliii.theatriadungeoncrawler.objects.DungeonGrid;
 import com.jliii.theatriadungeoncrawler.templates.DungeonTemplate;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
@@ -15,26 +15,25 @@ import org.bukkit.plugin.Plugin;
 
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.UUID;
 
 /**
- * Owns the full lifecycle of dungeon instances: creating a fresh void world,
- * generating a layout into it, moving players in, detecting completion, then
- * disposing of the world and (optionally) starting the next run.
+ * Owns the lifecycle of dungeon instances: one void world per run, into which an
+ * infinite sliding-window dungeon is generated and grown.
  *
- * <p>Phase 1 supports a single player per instance and an automatic
- * "play again" loop: reaching the exit room generates a brand-new dungeon and
- * tears the old one down.</p>
+ * <p>Each player gets their own instance world (Phase 1). Stepping on the
+ * emerald checkpoint <em>advances</em> the same world — building the next room
+ * and trimming the oldest — rather than creating a new world, so the server is
+ * not churning worlds as the player progresses.</p>
  */
 public class DungeonManager {
 
     /** Y level of the dungeon floor (the build origin) in every instance world. */
     private static final int ORIGIN_Y = 64;
-    /** Delay (ticks) between completing a dungeon and the next one generating. */
-    private static final long RESTART_DELAY_TICKS = 100L; // 5 seconds
+    /** Default window (active room count) if the player doesn't specify one. */
+    private static final int DEFAULT_WINDOW = 6;
 
     private final Plugin plugin;
     private final Random random = new Random();
@@ -43,28 +42,31 @@ public class DungeonManager {
 
     public DungeonManager(Plugin plugin) {
         this.plugin = plugin;
-        // Poll for players reaching the exit room a couple of times per second.
-        Bukkit.getScheduler().runTaskTimer(plugin, this::checkCompletions, 20L, 10L);
+        // Poll a few times per second for a player standing on the emerald.
+        Bukkit.getScheduler().runTaskTimer(plugin, this::checkCheckpoints, 20L, 5L);
     }
 
     /**
-     * Starts a new dungeon for the player, remembering where they came from so
-     * they can be returned later. If the player is already in a dungeon they
-     * are first removed from it.
+     * Starts a new endless dungeon for the player, remembering where they came
+     * from. If they are already in a dungeon they are removed from it first.
+     *
+     * @param window number of rooms kept alive at once (clamped to at least 2);
+     *               pass a value &lt;= 0 to use the default
      */
-    public void startDungeon(Player player, int roomCount, DungeonTemplate.DungeonType theme) {
+    public void startDungeon(Player player, int window, DungeonTemplate.DungeonType theme) {
         if (instanceByPlayer.containsKey(player.getUniqueId())) {
             leaveDungeon(player);
         }
 
-        Dungeon dungeon = createInstance(roomCount, theme);
+        int windowSize = window <= 0 ? DEFAULT_WINDOW : Math.max(2, window);
+        Dungeon dungeon = createInstance(windowSize, theme);
         if (dungeon == null) {
             player.sendMessage("Failed to create the dungeon world. Try again.");
             return;
         }
 
         addPlayer(dungeon, player, player.getLocation());
-        player.sendMessage("Entering a " + roomCount + "-room dungeon. Reach the emerald block to complete it!");
+        player.sendMessage("Entering an endless dungeon. Step on the emerald block to open the next room!");
     }
 
     /**
@@ -122,16 +124,16 @@ public class DungeonManager {
     // --- internals ---------------------------------------------------------
 
     /**
-     * Creates the world, schedules its build, generates the layout, and
-     * registers the instance. Does not add any players.
+     * Creates the world, schedules its build queue, generates the initial path,
+     * and registers the instance. Does not add any players.
      */
-    private Dungeon createInstance(int roomCount, DungeonTemplate.DungeonType theme) {
+    private Dungeon createInstance(int windowSize, DungeonTemplate.DungeonType theme) {
         World world = WorldFactory.createInstanceWorld();
         if (world == null) {
             return null;
         }
 
-        Dungeon dungeon = new Dungeon(world, roomCount, theme);
+        Dungeon dungeon = new Dungeon(world, windowSize, theme);
 
         // Each instance builds on its own queue so instances never block each other.
         int buildTaskId = Bukkit.getScheduler()
@@ -140,12 +142,14 @@ public class DungeonManager {
         dungeon.setBuildTaskId(buildTaskId);
 
         Location origin = new Location(world, 0, ORIGIN_Y, 0);
-        placeSpawnPlatform(world, origin);
-
         DungeonLayoutGenerator generator = new DungeonLayoutGenerator(world, dungeon.getWorkloadRunnable());
-        DungeonLayout layout = generator.generate(origin, roomCount, theme, random);
-        dungeon.setLayout(layout);
+        DungeonGrid grid = generator.generateInitial(origin, windowSize, theme, random);
+        dungeon.setGrid(grid);
         dungeon.setState(State.ACTIVE);
+
+        // Immediate safe floor under the spawn so the player doesn't fall while
+        // the asynchronous build reaches the start-room floor.
+        placeSpawnPlatform(grid.getSpawn());
 
         instancesById.put(dungeon.getUUID(), dungeon);
         return dungeon;
@@ -155,72 +159,52 @@ public class DungeonManager {
         dungeon.addPlayer(player.getUniqueId(), returnLocation);
         instanceByPlayer.put(player.getUniqueId(), dungeon);
 
-        Location spawn = dungeon.getLayout().getSpawn();
+        Location spawn = dungeon.getGrid().getSpawn();
         spawn.setYaw(player.getLocation().getYaw());
         spawn.setPitch(player.getLocation().getPitch());
         player.teleport(spawn);
     }
 
-    /** Iterates active instances and triggers a win when a player reaches the exit. */
-    private void checkCompletions() {
+    /** Advances any instance whose player is standing on the emerald checkpoint. */
+    private void checkCheckpoints() {
         for (Dungeon dungeon : new ArrayList<>(instancesById.values())) {
-            if (dungeon.getState() != State.ACTIVE || dungeon.getLayout() == null) {
+            if (dungeon.getState() != State.ACTIVE || dungeon.getGrid() == null || dungeon.isExtending()) {
                 continue;
             }
             for (UUID playerId : dungeon.getPlayers()) {
                 Player player = Bukkit.getPlayer(playerId);
-                if (player != null && dungeon.getLayout().isInsideExit(player.getLocation())) {
-                    handleWin(dungeon);
+                if (player != null && dungeon.getGrid().isOnEmerald(player.getLocation())) {
+                    advanceDungeon(dungeon);
                     break;
                 }
             }
         }
     }
 
-    private void handleWin(Dungeon dungeon) {
-        dungeon.setState(State.WON);
-        for (UUID playerId : dungeon.getPlayers()) {
-            Player player = Bukkit.getPlayer(playerId);
-            if (player != null) {
-                player.sendMessage("Dungeon complete! Generating your next dungeon...");
+    /** Extends the dungeon one room past the checkpoint the player just reached. */
+    private void advanceDungeon(Dungeon dungeon) {
+        dungeon.setExtending(true);
+        try {
+            DungeonGrid grid = dungeon.getGrid();
+            DungeonLayoutGenerator generator =
+                    new DungeonLayoutGenerator(grid.getWorld(), dungeon.getWorkloadRunnable());
+            boolean extended = generator.advance(grid, random);
+            String message = extended
+                    ? "Checkpoint! Sealing the way back and opening the path ahead..."
+                    : "The dungeon cannot extend any further from here.";
+            for (UUID playerId : dungeon.getPlayers()) {
+                Player player = Bukkit.getPlayer(playerId);
+                if (player != null) {
+                    player.sendMessage(message);
+                }
             }
+        } finally {
+            dungeon.setExtending(false);
         }
-        Bukkit.getScheduler().runTaskLater(plugin, () -> restart(dungeon), RESTART_DELAY_TICKS);
     }
 
     /**
-     * Builds a fresh instance with the same parameters, moves the players into
-     * it (preserving their original return locations), then disposes the old one.
-     */
-    private void restart(Dungeon oldDungeon) {
-        // The instance may have been torn down (e.g. everyone left) before this ran.
-        if (!instancesById.containsKey(oldDungeon.getUUID())) {
-            return;
-        }
-
-        Dungeon newDungeon = createInstance(oldDungeon.getRoomCount(), oldDungeon.getTheme());
-        if (newDungeon == null) {
-            // Could not make a new world; just tear the old one down.
-            disposeInstance(oldDungeon);
-            return;
-        }
-
-        for (UUID playerId : oldDungeon.getPlayers()) {
-            Location originalReturn = oldDungeon.getReturnLocation(playerId);
-            Player player = Bukkit.getPlayer(playerId);
-            if (player != null) {
-                addPlayer(newDungeon, player, originalReturn);
-                player.sendMessage("Reach the emerald block to complete it!");
-            }
-        }
-
-        // Players have been moved to the new world; safe to delete the old one.
-        disposeWorldAndTasks(oldDungeon);
-    }
-
-    /**
-     * Returns any remaining players to safety, then deletes the world. Use for
-     * abandoning an instance (as opposed to handing players to a new one).
+     * Returns any remaining players to safety, then deletes the world.
      */
     private void disposeInstance(Dungeon dungeon) {
         for (UUID playerId : dungeon.getPlayers()) {
@@ -231,10 +215,6 @@ public class DungeonManager {
                 teleportToSafety(player, returnTo);
             }
         }
-        disposeWorldAndTasks(dungeon);
-    }
-
-    private void disposeWorldAndTasks(Dungeon dungeon) {
         dungeon.setState(State.OFF);
         if (dungeon.getBuildTaskId() != -1) {
             Bukkit.getScheduler().cancelTask(dungeon.getBuildTaskId());
@@ -243,12 +223,14 @@ public class DungeonManager {
         WorldFactory.disposeWorld(dungeon.getWorld());
     }
 
-    private void placeSpawnPlatform(World world, Location origin) {
-        int cx = origin.getBlockX() + 4;
-        int cz = origin.getBlockZ() + 4;
+    private void placeSpawnPlatform(Location spawn) {
+        World world = spawn.getWorld();
+        int cx = spawn.getBlockX();
+        int cz = spawn.getBlockZ();
+        int y = spawn.getBlockY() - 1;
         for (int dx = -1; dx <= 1; dx++) {
             for (int dz = -1; dz <= 1; dz++) {
-                world.getBlockAt(cx + dx, origin.getBlockY(), cz + dz).setType(Material.STONE);
+                world.getBlockAt(cx + dx, y, cz + dz).setType(Material.STONE);
             }
         }
     }

@@ -175,17 +175,17 @@ public class Box implements CommandExecutor {
 
         Location origin = new Location(world, 0, 64, 0);
 
-        // Drop an immediate safe platform so the player doesn't fall into the
-        // void before the asynchronous build reaches the start-room floor.
+        DungeonLayoutGenerator generator = new DungeonLayoutGenerator(world, workloadRunnable);
+        Location spawn = generator.generateInitial(origin, roomCount, theme, new Random()).getSpawn();
+
+        // Drop an immediate safe platform under the spawn so the player doesn't
+        // fall into the void before the asynchronous build reaches the floor.
         for (int dx = -1; dx <= 1; dx++) {
             for (int dz = -1; dz <= 1; dz++) {
-                world.getBlockAt(origin.getBlockX() + 4 + dx, origin.getBlockY(), origin.getBlockZ() + 4 + dz)
+                world.getBlockAt(spawn.getBlockX() + dx, spawn.getBlockY() - 1, spawn.getBlockZ() + dz)
                         .setType(Material.STONE);
             }
         }
-
-        DungeonLayoutGenerator generator = new DungeonLayoutGenerator(world, workloadRunnable);
-        Location spawn = generator.generate(origin, roomCount, theme, new Random()).getSpawn();
 
         // Build the queued blocks automatically (rather than waiting for /box play).
         workloadRunnable.setManualExecution(false);
