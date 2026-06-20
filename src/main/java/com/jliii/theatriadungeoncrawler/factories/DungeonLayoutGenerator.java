@@ -64,7 +64,10 @@ public class DungeonLayoutGenerator {
     private static final int HEIGHT = 6;
     /** Corridor tube height. */
     private static final int CORRIDOR_HEIGHT = 5;
-    /** Door / corridor width (must be odd so it centres on a wall). */
+    /** Outer corridor width (box); its interior is two narrower than this. */
+    private static final int CORRIDOR_WIDTH = 5;
+    /** Door opening width (must be odd to centre on a wall). Matches the
+     *  corridor interior ({@code CORRIDOR_WIDTH - 2}) so the doorway is uniform. */
     private static final int DOOR_WIDTH = 3;
     /** Door opening height. */
     private static final int DOOR_HEIGHT = 3;
@@ -345,7 +348,8 @@ public class DungeonLayoutGenerator {
         int tMinZ = roomMinZ(to);
         int tMaxZ = tMinZ + FOOT - 1;
 
-        int half = DOOR_WIDTH / 2;
+        int corrHalf = CORRIDOR_WIDTH / 2;     // corridor box half-width (2)
+        int doorHalf = DOOR_WIDTH / 2;         // door opening half-width (1)
         int doorTop = oy + DOOR_HEIGHT;        // door spans oy+1 .. oy+DOOR_HEIGHT
         int corrTop = oy + CORRIDOR_HEIGHT - 1;
 
@@ -357,12 +361,12 @@ public class DungeonLayoutGenerator {
             int loX = Math.min(fWallX, tWallX);
             int hiX = Math.max(fWallX, tWallX);
             return new Connection(to,
-                    new Location(world, loX, oy, zc - half),
-                    new Location(world, hiX, corrTop, zc + half),
-                    new Location(world, fWallX, oy + 1, zc - half),
-                    new Location(world, fWallX, doorTop, zc + half),
-                    new Location(world, tWallX, oy + 1, zc - half),
-                    new Location(world, tWallX, doorTop, zc + half));
+                    new Location(world, loX, oy, zc - corrHalf),
+                    new Location(world, hiX, corrTop, zc + corrHalf),
+                    new Location(world, fWallX, oy + 1, zc - doorHalf),
+                    new Location(world, fWallX, doorTop, zc + doorHalf),
+                    new Location(world, tWallX, oy + 1, zc - doorHalf),
+                    new Location(world, tWallX, doorTop, zc + doorHalf));
         } else {
             // North/South: corridor along Z, centred on X.
             int xc = fMinX + FOOT / 2;
@@ -371,12 +375,12 @@ public class DungeonLayoutGenerator {
             int loZ = Math.min(fWallZ, tWallZ);
             int hiZ = Math.max(fWallZ, tWallZ);
             return new Connection(to,
-                    new Location(world, xc - half, oy, loZ),
-                    new Location(world, xc + half, corrTop, hiZ),
-                    new Location(world, xc - half, oy + 1, fWallZ),
-                    new Location(world, xc + half, doorTop, fWallZ),
-                    new Location(world, xc - half, oy + 1, tWallZ),
-                    new Location(world, xc + half, doorTop, tWallZ));
+                    new Location(world, xc - corrHalf, oy, loZ),
+                    new Location(world, xc + corrHalf, corrTop, hiZ),
+                    new Location(world, xc - doorHalf, oy + 1, fWallZ),
+                    new Location(world, xc + doorHalf, doorTop, fWallZ),
+                    new Location(world, xc - doorHalf, oy + 1, tWallZ),
+                    new Location(world, xc + doorHalf, doorTop, tWallZ));
         }
     }
 
@@ -402,6 +406,7 @@ public class DungeonLayoutGenerator {
      */
     private void placeDoorTorches(DungeonGrid grid, Coord cell, int[] exitDir) {
         int torchY = grid.getOriginY() + 2;
+        int flank = CORRIDOR_WIDTH / 2; // sit on the stone-brick door-frame edge
         int dx = exitDir[0];
         int dz = exitDir[1];
         int minX = roomMinX(cell);
@@ -415,15 +420,15 @@ public class DungeonLayoutGenerator {
             int torchX = wallX - dx; // one block into the room, against the wall
             int zc = centerZ(cell);
             BlockFace facing = dx > 0 ? BlockFace.WEST : BlockFace.EAST;
-            workloadQueue.addWorkload(new WallTorchWorkload(w, torchX, torchY, zc - 2, facing));
-            workloadQueue.addWorkload(new WallTorchWorkload(w, torchX, torchY, zc + 2, facing));
+            workloadQueue.addWorkload(new WallTorchWorkload(w, torchX, torchY, zc - flank, facing));
+            workloadQueue.addWorkload(new WallTorchWorkload(w, torchX, torchY, zc + flank, facing));
         } else {
             int wallZ = dz > 0 ? maxZ : minZ;
             int torchZ = wallZ - dz;
             int xc = centerX(cell);
             BlockFace facing = dz > 0 ? BlockFace.NORTH : BlockFace.SOUTH;
-            workloadQueue.addWorkload(new WallTorchWorkload(w, xc - 2, torchY, torchZ, facing));
-            workloadQueue.addWorkload(new WallTorchWorkload(w, xc + 2, torchY, torchZ, facing));
+            workloadQueue.addWorkload(new WallTorchWorkload(w, xc - flank, torchY, torchZ, facing));
+            workloadQueue.addWorkload(new WallTorchWorkload(w, xc + flank, torchY, torchZ, facing));
         }
     }
 
