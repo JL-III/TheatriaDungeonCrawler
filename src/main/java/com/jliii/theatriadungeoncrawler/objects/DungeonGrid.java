@@ -108,8 +108,8 @@ public class DungeonGrid {
     }
 
     /**
-     * @return {@code true} if the player is standing on (or in) the current
-     *         emerald checkpoint block.
+     * @return {@code true} if the player is standing on (or in) the 3x3 emerald
+     *         checkpoint pad.
      */
     public boolean isOnEmerald(Location loc) {
         if (loc == null || emeraldLocation == null || loc.getWorld() == null) {
@@ -119,8 +119,8 @@ public class DungeonGrid {
             return false;
         }
         int ey = emeraldLocation.getBlockY();
-        return loc.getBlockX() == emeraldLocation.getBlockX()
-                && loc.getBlockZ() == emeraldLocation.getBlockZ()
+        return Math.abs(loc.getBlockX() - emeraldLocation.getBlockX()) <= 1
+                && Math.abs(loc.getBlockZ() - emeraldLocation.getBlockZ()) <= 1
                 && (loc.getBlockY() == ey || loc.getBlockY() == ey + 1);
     }
 }
