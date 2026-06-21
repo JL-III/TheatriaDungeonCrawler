@@ -7,31 +7,42 @@ This document is the load-bearing design for the next phase: turning rooms from
 pure traversal space into **challenges that gate progression**. Everything below
 is meant to be agreed on before code is written.
 
-## Decisions (already made)
+## Decisions (made)
 
 - **Multiplayer: co-op gated.** Friends share one run/instance. A locked room
   opens for everyone the moment its objective is met. Advancing past a checkpoint
   requires *all living players* to be in the checkpoint room; stragglers are
   teleported forward before the old segment is torn down.
 - **Lock scope: mix of gated + free rooms.** Most rooms are *free* (traversal,
-  effect, loot — forward door open by default). A subset are *gated* (forward
-  door sealed until the objective is solved). The emerald checkpoint remains the
-  save-point cadence; per-room locks are the moment-to-moment layer on top.
+  effect, loot — forward door open by default). A *gated* minority seal the
+  forward door until solved. Target density **~1 in 4** non-checkpoint rooms.
+- **Death: respawn at the last checkpoint.** Death no longer ejects to the main
+  world. The player respawns at the current checkpoint room (the snake head,
+  which still exists) and the run continues. Keep-inventory still protects items
+  and XP. Lives are uncapped in v1 (tunable knob — see §8).
+- **Movement failure: soft reset at the room entrance.** Falling in lava / missing
+  a parkour jump does *not* kill — the player is caught, teleported to the room's
+  entrance, and the challenge re-arms. (Combat death still goes through the death
+  model above.)
+- **Rewards: deliberately sparse.** Completing a gated room may grant a *very*
+  light progression aid (e.g. a stone tool), run **score**, and/or fire a
+  configurable **list of console commands** — and always opens the door
+  (progression). It must stay minimal and must **not** touch the external key
+  currency (that's owned by a separate system).
 
 ## Goals
 
-1. Introduce a `RoomChallenge` abstraction with a clear lifecycle, owned per room.
-2. Make teardown leak-proof: entities and scheduled tasks a room creates are
-   tracked and disposed when the room is removed (or the instance is disposed).
+1. A `RoomChallenge` abstraction with a clear lifecycle, owned per room.
+2. Leak-proof teardown: entities and scheduled tasks a room creates are tracked
+   and disposed when the room is removed (or the instance is disposed).
 3. Seal/open forward doors at runtime based on objective completion.
-4. Detect room enter/leave (needed for effect rooms, lock activation, and co-op
-   presence gating).
-5. Make co-op advancement safe with the sliding-window teardown.
-6. Ship a thin vertical slice (2–3 challenge types) on top of the abstraction.
+4. Detect room enter/leave (effect rooms, lock activation, co-op presence).
+5. Co-op-safe advancement and checkpoint **respawn** under the sliding window.
+6. Ship a thin vertical slice (3 challenge types) on the abstraction.
 
-Non-goals for v1: multi-level doors (snake stays on one Y plane — see
-[Vertical challenges](#vertical-challenges)), prefab/schematic rooms (designed
-*for* later, not built now), persistence of in-progress runs across restarts.
+Non-goals for v1: multi-level doors (snake stays on one Y plane — §14),
+prefab/schematic rooms (designed *for* later, not built now), persistence of
+in-progress runs across server restarts.
 
 ---
 
@@ -41,24 +52,25 @@ Non-goals for v1: multi-level doors (snake stays on one Y plane — see
   `corridor` (bridge) box, `entryDir`. **No behavior or state.**
 - `DungeonGrid` — occupancy set, ordered `path` of `RoomNode` (the snake),
   spawn, emerald location, last exit direction.
-- `DungeonLayoutGenerator` — builds the spawn room + segments; `buildRoom`
-  carves every door open immediately; only the checkpoint door is retained for
-  sealing.
+- `DungeonLayoutGenerator` — builds spawn room + segments; `buildRoom` carves
+  every door open immediately; only the checkpoint door is retained for sealing.
 - `DungeonManager.tickInstances` — every 5 ticks: detach stragglers, advance the
   instance when **any** player is on the emerald.
-- `Dungeon` — holds the `World`, `WorkloadQueue`, `List<UUID> players`, return
-  locations, `extending` flag.
+- `Dungeon` — `World`, `WorkloadQueue`, `List<UUID> players`, return locations,
+  `extending` flag.
 - World rules already set: `DO_MOB_SPAWNING=false`, `DO_FIRE_TICK=false`,
   `KEEP_INVENTORY=true`, no daylight/weather cycle. Good — combat and lava rooms
   won't fight ambient spawns or spreading fire.
+- `DungeonProtectionListener` — `@HIGHEST` death handler forces keep-inventory;
+  respawn handler ejects to main world; break/place cancelled for participants.
 
 ---
 
 ## 1. The `RoomChallenge` abstraction
 
-A challenge is the *behavior* attached to a room. It is created at generation
-time, built via the workload queue, activated when players enter, ticked while
-active, and torn down with the room.
+A challenge is the *behavior* attached to a room: created at generation, built via
+the queue, activated when players enter, ticked while active, reset on failure,
+and torn down with the room.
 
 ```java
 public interface RoomChallenge {
@@ -73,40 +85,60 @@ public interface RoomChallenge {
      *  the room may be built far ahead of the player. */
     void build(RoomContext ctx);
 
-    /** First player crosses into the room's bbox: activate (spawn mobs, start
-     *  the lava timer, apply enter-effects, show the objective bar). Idempotent
-     *  — called once per activation, not per player. */
+    /** First player crosses into the bbox: spawn mobs, start the lava timer,
+     *  show the objective bar. Idempotent — once per activation, not per player. */
     void activate(RoomContext ctx);
 
-    /** Any player enters/leaves the bbox (for per-player effects and presence). */
+    /** Per-player bbox transitions (enter/leave effects, presence). */
     void onPlayerEnter(RoomContext ctx, Player player);
     void onPlayerLeave(RoomContext ctx, Player player);
 
-    /** Periodic while active (driven by the manager tick). */
+    /** Periodic while ACTIVE (driven by the manager tick). */
     void tick(RoomContext ctx);
+
+    /** Player failed a movement/skill check: re-arm to the activated state
+     *  (refill removed blocks, reset lava, clear partial progress). The manager
+     *  has already teleported the player to the room entrance. */
+    void reset(RoomContext ctx);
 
     boolean isComplete(RoomContext ctx);
 
-    /** Win: reward, sfx, and (for gated rooms) the manager opens the forward
-     *  door. Called once. */
+    /** Win, once: grant rewards (§10); the manager opens the forward door. */
     void onComplete(RoomContext ctx);
 
     /** Despawn tracked entities, cancel tracked tasks, restore blocks. Always
-     *  called on room teardown OR instance disposal, even if never activated. */
+     *  called on teardown OR instance disposal, even if never activated. */
     void teardown(RoomContext ctx);
 }
 ```
 
-### `RoomContext` (what a challenge is allowed to touch)
+### Per-room state machine
+
+`RoomNode` carries a `ChallengeState`:
+
+```
+PENDING ──activate()──▶ ACTIVE ──isComplete──▶ COMPLETE
+                          ▲ │
+                  reset() │ │ fail (movement)
+                          └─┘
+```
+
+- Free rooms start `COMPLETE` for door purposes (door open at build) but may still
+  `activate` for effect/loot behavior; they never gate.
+- `COMPLETE` is sticky and shared across all players (co-op). Re-entering a solved
+  room (e.g. after a checkpoint respawn) finds it already open — re-traversal is
+  fast.
+
+### `RoomContext` (what a challenge may touch)
 
 ```java
 public final class RoomContext {
     World world();
-    RoomNode room();              // geometry: bbox, doors
-    Dungeon dungeon();            // players in the run
+    RoomNode room();              // geometry: bbox, doors, entrance point
+    Dungeon dungeon();            // players, score, RNG
     WorkloadQueue queue();        // throttled block placement
-    RoomScope scope();            // entity + task registry (see §2)
-    Random random();              // per-instance seeded (see Open questions)
+    RoomScope scope();            // entity + task registry (§2)
+    Random random();              // per-instance seeded (§8)
 }
 ```
 
@@ -122,21 +154,21 @@ public enum ChallengeType {
     // gated
     CLEAR_MOBS, FIND_KEY, PARKOUR_GOLD, FLOOR_IS_LAVA, BUTTON_SEQUENCE, ...
 }
-
 interface ChallengeFactory { RoomChallenge create(ChallengeType type); }
 ```
 
-The generator picks a `ChallengeType` per room from a weighted table (mostly
-free, a minority gated), instantiates the challenge, and stores it on the
-`RoomNode`. Weights/look-up live in one place so balancing is a config change.
+The generator picks a type per room from a weighted table — **~25% gated, ~75%
+free**, with a guard against two gated rooms back-to-back — instantiates the
+challenge, and stores it on the `RoomNode`. Weights live in one place for balance
+tuning.
 
 ---
 
 ## 2. Entity & task lifecycle — `RoomScope` (the leak fix)
 
-`removeTail` currently clears blocks only. The moment rooms spawn mobs or
-schedule timers, sliding the window will orphan live entities and running
-`BukkitRunnable`s. Every room gets a `RoomScope`:
+`removeTail` clears *blocks* only. Once rooms spawn mobs or schedule timers,
+sliding the window will orphan live entities and running tasks. Every room gets a
+`RoomScope`:
 
 ```java
 public final class RoomScope {
@@ -146,15 +178,12 @@ public final class RoomScope {
 }
 ```
 
-- Every spawned entity is tagged with a `PersistentDataContainer` key
-  `dungeon_room = <instanceUUID>:<roomId>` so a stray reload can still sweep
+- Every spawned entity is tagged via `PersistentDataContainer`
+  `dungeon_room = <instanceUUID>:<roomId>` so even a stray reload can sweep
   leftovers (defense in depth on top of in-memory tracking).
-- `teardown` calls `scope.dispose()` then restores blocks (via the queue).
-- Instance disposal disposes every room's scope before deleting the world.
-
-This also fixes a latent issue: instance disposal deletes the world (which clears
-entities) but never cancels per-room timers — `RoomScope.dispose()` makes that
-explicit and uniform.
+- `teardown` calls `scope.dispose()` then restores blocks via the queue.
+- Instance disposal disposes every room's scope before deleting the world — this
+  also closes today's latent gap where per-room timers would never be cancelled.
 
 ---
 
@@ -166,158 +195,237 @@ filled until N is solved.
 
 Changes to `buildRoom` / segment generation:
 
-- Build the bridge + tunnel as today, **but** decide per the *current* room's
-  challenge whether its forward door starts open or sealed:
-  - Current room is **free** → carve the forward door open at build time (today's
+- Build the bridge + tunnel as today, then per the *current* room's challenge:
+  - current room **free** → carve the forward door open at build time (today's
     behavior).
-  - Current room is **gated** → after carving the tunnel, immediately re-fill the
-    forward door slice (seal it), and record that door box on the current room as
-    its `lockDoor`.
-- `RoomNode` gains a forward-door reference so the manager can open it:
-  - add `Location lockDoorMin/Max` (the box to carve on completion), and
-  - a transient `RoomChallenge challenge` + a `boolean unlocked` flag.
-- On `onComplete`, the manager carves `lockDoor` open (queued) and sets
-  `unlocked = true`.
+  - current room **gated** → after carving the tunnel, immediately re-fill the
+    forward door slice (seal it) and record that box on the current room as its
+    `lockDoor`.
+- `RoomNode` gains: `RoomChallenge challenge`, `ChallengeState state`,
+  `Location lockDoorMin/Max`, `int roomId`, and an optional per-room ceiling
+  height (§14).
+- `onComplete` → the manager carves `lockDoor` open (queued) and sets state
+  `COMPLETE`.
 
 Because the whole segment is still built ahead of time (FIFO queue guarantees a
-door only opens once its room exists), the player simply meets sealed doors at
-gated rooms and walks freely through free rooms.
-
-Checkpoint interaction: the last room of a segment is the emerald checkpoint and
-stays a checkpoint (not a normal gate). A gated room may sit anywhere in the
-segment before it.
+door only opens once its room exists), the player meets sealed doors at gated
+rooms and walks freely through free rooms.
 
 ---
 
 ## 4. Room enter/leave detection
 
-Needed for effect rooms, lock activation, and co-op presence. Cheap and
-sufficient: a point-in-bbox test against `RoomNode.roomMin/Max` (inclusive of the
-door region), evaluated for each player on the manager tick.
+A point-in-bbox test against `RoomNode.roomMin/Max` (inclusive of the door
+region), evaluated per player on the manager tick:
 
-- The manager keeps `Map<UUID, RoomNode> currentRoom` per player.
-- Each tick, recompute the room each player is in; diff against `currentRoom` to
-  fire `onPlayerLeave(old)` / `onPlayerEnter(new)`, and `activate(new)` the first
-  time any player enters an un-activated room.
-- Multi-cell rooms are a single rectangle, so one bbox test covers them.
+- The manager keeps `Map<UUID, RoomNode> currentRoom`.
+- Each tick, recompute each player's room; diff against `currentRoom` to fire
+  `onPlayerLeave(old)` / `onPlayerEnter(new)`, and `activate(new)` the first time
+  any player enters a `PENDING` room.
+- Multi-cell rooms are one rectangle, so a single bbox test covers them.
 
-We already poll every 5 ticks; effect application and presence at that cadence is
-fine. Lava-wave timing runs on its own scheduled task (finer granularity).
-
----
-
-## 5. Co-op gated advancement (sliding-window safety)
-
-The conflict today: `advance` deletes the segment behind the checkpoint when
-**any** player touches the emerald — a friend mid-segment falls into the void.
-New rules:
-
-1. **Advance gate:** advance only when *every living player* in the instance is
-   within the checkpoint room's bbox (and at least one is on the emerald). Until
-   then, show a bossbar/action-bar: "Waiting for players (2/3)".
-2. **Straggler pull:** on advance, before `removeTail`, teleport any player not
-   yet in the checkpoint room into it (they're being swept; pull them to safety).
-3. **Shared lock state:** a gated room's completion is shared — once solved, the
-   door is open for all; players who join late or re-enter see it unlocked.
-4. **Join API:** add `DungeonManager.joinDungeon(player, host)` to add a player
-   to an existing instance (the data model already holds a player list; only the
-   entry path is missing). Joiners must also enter empty-handed and are teleported
-   to the host's current room (or spawn if mid-build).
-5. **Leave/death/quit:** unchanged per-player, but disposal happens only when the
-   instance is truly empty (already handled).
+5-tick cadence is fine for effects and presence. Lava waves run on their own
+scheduled task for finer timing (via `RoomScope`).
 
 ---
 
-## 6. Manager tick loop, revised
+## 5. Death & checkpoint respawn
+
+Today death ejects to the main world. New model:
+
+- The **respawn anchor** is the box center of the snake **head** room
+  (`path.peekFirst()`) — i.e. the last checkpoint the party reached. `DungeonGrid`
+  caches `checkpointSpawn`, set in `generateInitial` (start room) and updated on
+  every `advance` to the room the player checkpointed at (which becomes the new
+  head).
+- `DungeonManager.handleDeath` no longer detaches/ejects participants; it returns
+  the `checkpointSpawn`. The respawn handler in `DungeonProtectionListener` sets
+  the respawn location to it (instead of ejecting). Keep-inventory already
+  preserves items/XP.
+- Death does **not** reset challenges — combat rooms keep their remaining mobs;
+  the player resumes mid-state on re-entry.
+- Leaving (`/leave`), quitting, or walking out of the world still returns to the
+  main world and disposes the instance when empty (unchanged).
+- **Lives:** uncapped in v1, exposed as `livesPerRun` (default `-1`). If combat
+  proves trivial with infinite checkpoint respawns, set a cap; exhausting lives
+  ends the run (eject to main world).
+
+---
+
+## 6. Movement failure & soft reset
+
+Distinct from combat death. A movement challenge defines failure (touched lava,
+fell below the room floor, ran out of disappearing floor):
+
+- The manager (or the challenge) detects failure for a player and calls
+  `resetPlayerToRoomEntrance(player, room)` — teleport to `room.entrancePoint()`
+  (just inside the incoming door) — then `challenge.reset(ctx)` re-arms the room.
+- `DungeonProtectionListener` cancels **lava, fall, and void** damage for
+  participants standing in a movement room and routes them to the soft reset
+  instead, so a fall never becomes a death. (A normal void plunge outside a
+  movement room still falls through to the death model.)
+- `reset` is challenge-specific: `FLOOR_IS_LAVA` restores the floor and restarts
+  its timer; parkour refills any consumed blocks; etc.
+
+---
+
+## 7. Rewards (sparse, data-driven)
+
+`onComplete` resolves a `RewardSpec` — intentionally minimal and configurable:
+
+```java
+public final class RewardSpec {
+    List<ItemStack> items;     // e.g. a single stone tool, rarely
+    List<String> commands;     // console commands with placeholders
+    int score;                 // added to the run score
+}
+```
+
+- **Items:** very light progression aids only (a stone pickaxe/sword, a torch
+  handful). Granted sparingly — most gated rooms give nothing but the open door.
+- **Commands:** a configured list run via `Bukkit.dispatchCommand(consoleSender,
+  …)` with placeholders (`%player%`, `%room%`, `%depth%`, `%score%`). This is the
+  clean integration seam for any *external* reward system without coupling — and
+  explicitly **not** used to mint the key currency ourselves.
+- **Score:** `Dungeon` tracks a run `score` (and `depth` = segments cleared) for a
+  future leaderboard. No item economy coupling.
+- **Progression:** always — the door opens. That is the baseline reward.
+
+Defaults ship near-empty (progression + a little score); items/commands are opt-in
+per challenge type via config.
+
+---
+
+## 8. Co-op gated advancement (sliding-window safety)
+
+Today `advance` deletes the segment behind the checkpoint when **any** player
+touches the emerald — a friend mid-segment falls into the void. New rules:
+
+1. **Advance gate:** advance only when *every living player* is within the
+   checkpoint room's bbox (and at least one is on the emerald). Until then show a
+   bossbar/action-bar: "Waiting for players (2/3)".
+2. **Straggler pull:** on advance, before `removeTail`, teleport any player not in
+   the checkpoint room into it (they're about to be swept).
+3. **Shared lock state:** gated completion is shared — solved once, open for all.
+4. **Respawn anchor update:** `advance` updates `checkpointSpawn` (§5) to the new
+   head room.
+5. **Join API:** add `DungeonManager.joinDungeon(player, host)` to add a player to
+   an existing instance (the player list exists; only the entry path is missing).
+   Joiners enter empty-handed and spawn at the host's current room (or the
+   checkpoint if mid-build).
+6. **Per-instance RNG:** replace the shared `Random` with a per-`Dungeon` seeded
+   `Random` (stored on `Dungeon`) — isolates instances and enables reproducible /
+   shareable seeds (daily-seed feature) for free.
+
+---
+
+## 9. Event routing
+
+Challenges react to Bukkit events for the player's *current* room. The listener
+forwards to the manager, which dispatches to that room's challenge:
+
+| Event | Used by | Routing |
+|---|---|---|
+| `EntityDeathEvent` | `CLEAR_MOBS` | match the dying entity's `dungeon_room` PDC tag → that room's challenge |
+| `PlayerInteractEvent` | `FIND_KEY`, `BUTTON_SEQUENCE` | locate the player's current room → challenge |
+| `ProjectileHitEvent` | shooting-gallery | match the hit block/target to a room |
+| `EntityDamageEvent` (lava/fall/void) | movement rooms | participant in a movement room → soft reset (§6), cancel damage |
+| poll (manager tick) | enter/leave, `FLOOR_IS_LAVA` timing, combat win-check | bbox + challenge `tick()` |
+
+`PlayerMoveEvent` is avoided for hot paths — position-based checks ride the
+existing 5-tick poll; only fine-timed mechanics (lava waves) use their own
+scheduled task.
+
+---
+
+## 10. Manager tick loop, revised
 
 Per active instance, each tick:
 
 1. Detach players who left the world; dispose if empty (unchanged).
 2. Recompute per-player current room; fire enter/leave/activate (§4).
-3. `tick()` every *active, incomplete* room that has players in it; if it just
-   became complete, run `onComplete` and open its `lockDoor` (§3).
-4. If not `extending` and the advance gate is satisfied (§5.1), `advanceDungeon`.
+3. `tick()` every `ACTIVE` room that has players in it; on a fresh `isComplete`,
+   run `onComplete` → reward (§7) → open `lockDoor` (§3) → state `COMPLETE`.
+4. If not `extending` and the co-op advance gate is satisfied (§8.1),
+   `advanceDungeon` (with straggler pull + respawn-anchor update).
 5. "Generating the area ahead…" action bar while the queue is busy (unchanged).
 
-Only rooms with players inside are ticked, so cost scales with party size, not
-dungeon length.
+Only occupied rooms are ticked, so cost scales with party size, not dungeon
+length.
 
 ---
 
-## 7. Vertical challenges (height) — v1 compromise {#vertical-challenges}
+## 11. Vertical challenges (height) — v1 compromise {#vertical-challenges}
 
-Parkour-to-gold wants verticality, but multi-level doors would break the
-single-Y-plane snake (the connector's door Y is fixed). For v1:
+Parkour wants verticality, but multi-level doors would break the single-Y-plane
+snake (the connector's door Y is fixed). For v1:
 
 - Keep **all doors at floor level** on one plane.
-- A "tall" room simply raises its **ceiling** (per-room height — `RoomNode`
-  already stores `roomMax`, so this is a build-time choice, not a connector
-  change). Parkour climbs to an objective (gold block / button) high in the room;
-  hitting it opens the **floor-level** forward door. Player descends and exits.
-- `FLOOR_IS_LAVA` needs no extra height — it's a floor mechanic on the standard
-  room.
+- A "tall" room raises only its **ceiling** (per-room height is a build-time
+  choice on `RoomNode.roomMax` — no connector change). Parkour climbs to an
+  objective (gold block / button) high in the room; reaching it opens the
+  **floor-level** forward door; the player descends and exits.
+- `FLOOR_IS_LAVA` needs no extra height — it's a floor mechanic on a standard room.
 
-Multi-level doors and true vertical shafts are deferred (they require connector
-work) and noted as a future enhancement.
+True vertical shafts / multi-level doors are deferred (they need connector work).
 
 ---
 
-## 8. Vertical slice to ship first
+## 12. Vertical slice to ship first
 
-Implement the abstraction (§1–§6) plus **three** challenges that exercise every
+Implement the abstraction (§1–§10) plus **three** challenges that exercise every
 moving part:
 
 1. **`EFFECT_BUFF` (free):** enter → apply Speed/Jump; leave → strip. Exercises
-   enter/leave + per-player effects, no entities/doors.
+   enter/leave + per-player effects; no entities/doors.
 2. **`CLEAR_MOBS` (gated):** activate → `scope.spawn` a small wave targeting the
    room; complete when all tracked mobs are dead → open forward door. Exercises
-   the entity registry, gating, and teardown leak-proofing.
-3. **`FIND_KEY` (gated):** a tagged key item hidden in a chest/under a block;
-   detected at the door (or used on a "keyhole" lever) → open forward door.
-   Exercises tagged items + a non-combat gate.
+   the entity registry, gating, teardown, and `EntityDeathEvent` routing.
+3. **`FIND_KEY` (gated):** a tagged key item hidden in a chest / under a block;
+   used on a keyhole lever (or detected at the door) → open forward door.
+   Exercises tagged items, `PlayerInteractEvent`, and a non-combat gate.
 
-These three prove: free vs gated doors, enter/leave, entity + task teardown, and
-co-op shared completion. Everything else (`FLOOR_IS_LAVA`, parkour, button
-sequence, sculk stealth, etc.) is then "just another `RoomChallenge`."
+These prove free vs gated doors, enter/leave, entity + task teardown, co-op shared
+completion, checkpoint respawn, and the reward seam. Everything else
+(`FLOOR_IS_LAVA`, parkour, button sequence, sculk stealth, …) is then "just
+another `RoomChallenge`."
 
 ---
 
-## 9. Build/performance notes
+## 13. Performance notes
 
 - Layout *planning* runs synchronously in `advanceDungeon`. Choosing challenge
-  types + building richer rooms adds work; keep an eye on the per-advance tick
-  cost and chunk the planning across ticks if it spikes.
-- Challenge `build` must use the queue (never direct bulk placement) to stay
-  within the per-tick budget.
+  types + richer rooms adds work; watch the per-advance tick cost and chunk the
+  planning across ticks if it spikes.
+- Challenge `build` must use the queue (never direct bulk placement).
 - `tick()` runs only for occupied, active rooms — bounded by party size.
 
-## 10. Open questions / suggested defaults
+## 14. Open questions / defaults
 
-- **Per-instance seeded `Random`.** Today a single shared `Random` is used.
-  Switching to a per-instance seed (stored on `Dungeon`) buys reproducible /
-  shareable runs (daily seed) for free and isolates instances. *Suggest: do it
-  as part of this phase.*
-- **Failure semantics.** What happens when a gated challenge is failed (e.g.
-  touch lava, fall in parkour)? Options: respawn at the room's entrance and
-  reset the challenge, vs. end the run. *Suggest: reset-at-room-entrance for
-  movement challenges; document per challenge.*
-- **Rewards.** `onComplete` is the natural hook for the existing key/currency
-  reward system. *Suggest: a small reward per gated room, larger at checkpoints.*
-- **Gated-room density.** Weighting in the challenge table. *Suggest: ~1 in 4
-  rooms gated to start; tune from playtests.*
+- **Lives cap.** Default uncapped checkpoint respawns; `livesPerRun` knob ready if
+  combat needs stakes.
+- **Failure penalty.** Soft reset is free in v1; could add a small score/time
+  penalty later.
+- **Gated guard.** No two gated rooms back-to-back (default on) — confirm desired.
 
 ---
 
 ## Touch list (when we implement)
 
-- `objects/RoomNode` — add `challenge`, `lockDoorMin/Max`, `unlocked`, height.
-- `objects/Dungeon` — per-instance `Random`, `currentRoom` map, scope ownership.
-- New: `challenge/RoomChallenge`, `challenge/ChallengeType`,
-  `challenge/RoomContext`, `challenge/RoomScope`, `challenge/ChallengeFactory`,
-  and the three v1 challenge classes.
-- `factories/DungeonLayoutGenerator` — pick + attach challenges; seal forward
-  doors for gated rooms; per-room height.
-- `managers/DungeonManager` — enter/leave detection, room ticking, co-op advance
-  gate + straggler pull, `joinDungeon`, leak-proof disposal via scopes.
-- `listeners/DungeonProtectionListener` — feed relevant events (entity death,
-  player interact, move) to the active room's challenge.
+- `objects/RoomNode` — add `roomId`, `challenge`, `state`, `lockDoorMin/Max`,
+  ceiling height, `entrancePoint()`.
+- `objects/DungeonGrid` — `checkpointSpawn` anchor (set/update on advance).
+- `objects/Dungeon` — per-instance seeded `Random`, `score`/`depth`,
+  `currentRoom` map (or hold it on the manager), room-scope ownership.
+- New package `challenge/` — `RoomChallenge`, `ChallengeType`, `ChallengeState`,
+  `RoomContext`, `RoomScope`, `ChallengeFactory`, `RewardSpec`, and the three v1
+  challenge classes.
+- `factories/DungeonLayoutGenerator` — pick + attach challenges (weighted ~1/4
+  gated, no back-to-back); seal forward doors for gated rooms; per-room height.
+- `managers/DungeonManager` — enter/leave detection, room ticking, reward +
+  door-open on complete, co-op advance gate + straggler pull, checkpoint respawn,
+  soft reset, `joinDungeon`, leak-proof disposal via scopes.
+- `listeners/DungeonProtectionListener` — route `EntityDeathEvent`,
+  `PlayerInteractEvent`, `ProjectileHitEvent`, `EntityDamageEvent` to the active
+  room's challenge; change respawn from eject → checkpoint anchor; cancel
+  lava/fall/void damage in movement rooms → soft reset.
