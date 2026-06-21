@@ -16,10 +16,11 @@ is meant to be agreed on before code is written.
 - **Lock scope: mix of gated + free rooms.** Most rooms are *free* (traversal,
   effect, loot — forward door open by default). A *gated* minority seal the
   forward door until solved. Target density **~1 in 4** non-checkpoint rooms.
-- **Death: respawn at the last checkpoint.** Death no longer ejects to the main
-  world. The player respawns at the current checkpoint room (the snake head,
-  which still exists) and the run continues. Keep-inventory still protects items
-  and XP. Lives are uncapped in v1 (tunable knob — see §8).
+- **Death: respawn at the last checkpoint, 3 lives per run.** Death no longer
+  ejects to the main world. The player respawns at the current checkpoint room
+  (the snake head, which still exists) and the run continues. Keep-inventory still
+  protects items and XP. Each run grants **3 lives**; the death that spends the
+  last one ends the run (eject to main world). Movement soft-resets cost no life.
 - **Movement failure: soft reset at the room entrance.** Falling in lava / missing
   a parkour jump does *not* kill — the player is caught, teleported to the room's
   entrance, and the challenge re-arms. (Combat death still goes through the death
@@ -246,9 +247,14 @@ Today death ejects to the main world. New model:
   the player resumes mid-state on re-entry.
 - Leaving (`/leave`), quitting, or walking out of the world still returns to the
   main world and disposes the instance when empty (unchanged).
-- **Lives:** uncapped in v1, exposed as `livesPerRun` (default `-1`). If combat
-  proves trivial with infinite checkpoint respawns, set a cap; exhausting lives
-  ends the run (eject to main world).
+- **Lives:** **3 per run** (`livesPerRun = 3`, tunable). `Dungeon` tracks
+  `livesRemaining`; each combat death decrements it and respawns the player at the
+  checkpoint anchor. When it hits zero the run ends — the player is ejected to the
+  main world (keeping what they found) and the final score is recorded (§7.1).
+  Movement soft-resets (§6) never decrement lives. In co-op, lives are **shared
+  across the party** (a shared pool), so reckless play costs everyone — a dead
+  player spectates until the next checkpoint respawn, and the run ends only when
+  the shared pool is exhausted.
 
 ---
 
@@ -287,12 +293,38 @@ public final class RewardSpec {
   …)` with placeholders (`%player%`, `%room%`, `%depth%`, `%score%`). This is the
   clean integration seam for any *external* reward system without coupling — and
   explicitly **not** used to mint the key currency ourselves.
-- **Score:** `Dungeon` tracks a run `score` (and `depth` = segments cleared) for a
-  future leaderboard. No item economy coupling.
+- **Score:** an optional small per-room bonus that feeds the run score (§7.1).
+  Most gated rooms give `0` — the score that matters is how far and how long the
+  run lasts, not grinding rooms.
 - **Progression:** always — the door opens. That is the baseline reward.
 
-Defaults ship near-empty (progression + a little score); items/commands are opt-in
-per challenge type via config.
+Defaults ship near-empty (progression only); items/commands/score are opt-in per
+challenge type via config.
+
+### 7.1 Run scoring — depth + survival time
+
+The run's score is primarily **how far** the party got and **how long** they
+lasted, not per-room completion:
+
+```
+score = depth * DEPTH_WEIGHT
+      + floor(secondsSurvived / TIME_UNIT) * TIME_WEIGHT
+      + bonusFromRewards          // sum of any RewardSpec.score
+```
+
+- **Depth** = rooms entered (or segments cleared — pick one unit; rooms gives finer
+  granularity). It is the dominant term, so pushing forward always beats stalling.
+- **Survival time** = seconds from run start until the run ends (lives exhausted,
+  leave, or quit). A secondary term so lasting longer is rewarded, but **depth
+  outweighs idling** — `DEPTH_WEIGHT` is set so one new room is worth more than the
+  time a careful player would spend reaching it. This avoids an exploit where
+  standing still farms score.
+- `Dungeon` tracks `depth`, `runStartMillis`, and the running `score`. The final
+  score is computed when the run ends and handed off (leaderboard / a configured
+  command) — it never mints the key currency.
+- In co-op the run has a single shared score for the party.
+
+All three weights are config constants for tuning.
 
 ---
 
@@ -402,8 +434,9 @@ another `RoomChallenge`."
 
 ## 14. Open questions / defaults
 
-- **Lives cap.** Default uncapped checkpoint respawns; `livesPerRun` knob ready if
-  combat needs stakes.
+- **Lives.** Decided: 3 per run, shared in co-op (§5).
+- **Score weights.** `DEPTH_WEIGHT` / `TIME_WEIGHT` / `TIME_UNIT` need playtest
+  tuning; depth must dominate so idling can't farm score (§7.1).
 - **Failure penalty.** Soft reset is free in v1; could add a small score/time
   penalty later.
 - **Gated guard.** No two gated rooms back-to-back (default on) — confirm desired.
@@ -415,8 +448,9 @@ another `RoomChallenge`."
 - `objects/RoomNode` — add `roomId`, `challenge`, `state`, `lockDoorMin/Max`,
   ceiling height, `entrancePoint()`.
 - `objects/DungeonGrid` — `checkpointSpawn` anchor (set/update on advance).
-- `objects/Dungeon` — per-instance seeded `Random`, `score`/`depth`,
-  `currentRoom` map (or hold it on the manager), room-scope ownership.
+- `objects/Dungeon` — per-instance seeded `Random`, `livesRemaining`, `depth`,
+  `runStartMillis`, running `score`, `currentRoom` map (or hold it on the
+  manager), room-scope ownership.
 - New package `challenge/` — `RoomChallenge`, `ChallengeType`, `ChallengeState`,
   `RoomContext`, `RoomScope`, `ChallengeFactory`, `RewardSpec`, and the three v1
   challenge classes.
