@@ -248,13 +248,34 @@ Today death ejects to the main world. New model:
 - Leaving (`/leave`), quitting, or walking out of the world still returns to the
   main world and disposes the instance when empty (unchanged).
 - **Lives:** **3 per run** (`livesPerRun = 3`, tunable). `Dungeon` tracks
-  `livesRemaining`; each combat death decrements it and respawns the player at the
-  checkpoint anchor. When it hits zero the run ends — the player is ejected to the
-  main world (keeping what they found) and the final score is recorded (§7.1).
-  Movement soft-resets (§6) never decrement lives. In co-op, lives are **shared
-  across the party** (a shared pool), so reckless play costs everyone — a dead
-  player spectates until the next checkpoint respawn, and the run ends only when
-  the shared pool is exhausted.
+  `livesRemaining`; each combat death decrements it. When it hits zero the run
+  ends — the player(s) are ejected to the main world (keeping what they found) and
+  the final score is recorded (§7.1). Movement soft-resets (§6) never decrement
+  lives. In co-op, lives are **shared across the party** (a shared pool), so
+  reckless play costs everyone. On death (pool still > 0) the player enters the
+  **downed** state (§5.1) and then respawns at the checkpoint anchor.
+
+### 5.1 Downed state (no free-cam — locked teammate view)
+
+Free-cam spectator would let a dead player fly ahead and spoil unrevealed/locked
+rooms, so we never use it. On death with the pool not yet empty:
+
+- **Co-op:** put the player in `SPECTATOR` **locked to a living teammate** via
+  `player.setSpectatorTarget(teammate)`, re-asserted every manager tick so they
+  cannot sneak out to free-cam (if Paper lets them detach or nudge the camera, we
+  re-bind the target and snap them back). They see only what that teammate sees —
+  nothing ahead is revealed. After a short respawn cooldown (`downedCooldownTicks`,
+  default ~10s) they respawn in survival at the **current checkpoint anchor** and
+  rejoin. The shared-life cost is the real penalty; the locked spectate just
+  covers the down-time without spoiling anything.
+- **Solo, or whole party simultaneously down:** no teammate to follow, so skip
+  spectating and respawn immediately at the current checkpoint anchor.
+- Rejoin restores `SURVIVAL`, clears the spectator target, and teleports to the
+  checkpoint.
+
+Open: cooldown vs. "wait until the party reaches the *next* checkpoint" (harsher,
+makes the survivor carry the team). Recommend the short cooldown for v1 to avoid
+long dead-time; easy to switch later.
 
 ---
 
@@ -458,7 +479,8 @@ another `RoomChallenge`."
   gated, no back-to-back); seal forward doors for gated rooms; per-room height.
 - `managers/DungeonManager` — enter/leave detection, room ticking, reward +
   door-open on complete, co-op advance gate + straggler pull, checkpoint respawn,
-  soft reset, `joinDungeon`, leak-proof disposal via scopes.
+  downed-state (locked `setSpectatorTarget` + re-assert + cooldown respawn), soft
+  reset, `joinDungeon`, leak-proof disposal via scopes.
 - `listeners/DungeonProtectionListener` — route `EntityDeathEvent`,
   `PlayerInteractEvent`, `ProjectileHitEvent`, `EntityDamageEvent` to the active
   room's challenge; change respawn from eject → checkpoint anchor; cancel
