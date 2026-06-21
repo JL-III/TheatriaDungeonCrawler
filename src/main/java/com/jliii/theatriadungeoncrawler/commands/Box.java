@@ -3,6 +3,7 @@ package com.jliii.theatriadungeoncrawler.commands;
 import com.jliii.theatriadungeoncrawler.TheatriaDungeonCrawler;
 import com.jliii.theatriadungeoncrawler.factories.DungeonLayoutGenerator;
 import com.jliii.theatriadungeoncrawler.factories.WorldFactory;
+import com.jliii.theatriadungeoncrawler.objects.Dungeon;
 import com.jliii.theatriadungeoncrawler.objects.Room;
 import com.jliii.theatriadungeoncrawler.util.runnables.DungeonBuilder;
 import com.jliii.theatriadungeoncrawler.util.runnables.WorkloadQueue;
@@ -17,7 +18,6 @@ import org.bukkit.entity.Player;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Random;
 
 public class Box implements CommandExecutor {
 
@@ -175,8 +175,9 @@ public class Box implements CommandExecutor {
 
         Location origin = new Location(world, 0, 64, 0);
 
-        DungeonLayoutGenerator generator = new DungeonLayoutGenerator(world, workloadQueue);
-        Location spawn = generator.generateInitial(origin, roomCount, theme, new Random()).getSpawn();
+        Dungeon debugDungeon = new Dungeon(world, roomCount, theme, workloadQueue);
+        DungeonLayoutGenerator generator = new DungeonLayoutGenerator(plugin, debugDungeon);
+        Location spawn = generator.generateInitial(origin, roomCount, theme, debugDungeon.getRandom()).getSpawn();
 
         // Drop an immediate safe platform under the spawn so the player doesn't
         // fall into the void before the asynchronous build reaches the floor.

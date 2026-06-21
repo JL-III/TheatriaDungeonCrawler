@@ -5,6 +5,7 @@ import com.jliii.theatriadungeoncrawler.factories.DungeonLayoutGenerator;
 import com.jliii.theatriadungeoncrawler.factories.WorldFactory;
 import com.jliii.theatriadungeoncrawler.objects.Dungeon;
 import com.jliii.theatriadungeoncrawler.objects.DungeonGrid;
+import com.jliii.theatriadungeoncrawler.objects.RoomNode;
 import com.jliii.theatriadungeoncrawler.templates.DungeonTemplate;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
@@ -19,7 +20,6 @@ import org.bukkit.plugin.Plugin;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Random;
 import java.util.UUID;
 
 /**
@@ -38,7 +38,6 @@ public class DungeonManager {
     private static final int ORIGIN_Y = 64;
 
     private final Plugin plugin;
-    private final Random random = new Random();
     private final Map<UUID, Dungeon> instancesById = new HashMap<>();
     private final Map<UUID, Dungeon> instanceByPlayer = new HashMap<>();
 
@@ -154,8 +153,8 @@ public class DungeonManager {
         dungeon.setBuildTaskId(buildTaskId);
 
         Location origin = new Location(world, 0, ORIGIN_Y, 0);
-        DungeonLayoutGenerator generator = new DungeonLayoutGenerator(world, dungeon.getWorkloadQueue());
-        DungeonGrid grid = generator.generateInitial(origin, fixedSegmentLength, theme, random);
+        DungeonLayoutGenerator generator = new DungeonLayoutGenerator(plugin, dungeon);
+        DungeonGrid grid = generator.generateInitial(origin, fixedSegmentLength, theme, dungeon.getRandom());
         dungeon.setGrid(grid);
         dungeon.setState(State.ACTIVE);
 
@@ -240,9 +239,8 @@ public class DungeonManager {
         dungeon.setExtending(true);
         try {
             DungeonGrid grid = dungeon.getGrid();
-            DungeonLayoutGenerator generator =
-                    new DungeonLayoutGenerator(grid.getWorld(), dungeon.getWorkloadQueue());
-            boolean extended = generator.advance(grid, random);
+            DungeonLayoutGenerator generator = new DungeonLayoutGenerator(plugin, dungeon);
+            boolean extended = generator.advance(grid, dungeon.getRandom());
             String direction = grid.getLastExitDirection();
             String message = extended
                     ? "Checkpoint reached! The path opens to the "
@@ -269,6 +267,16 @@ public class DungeonManager {
                 sendToSafety(player, returnTo);
             }
         }
+        // Dispose every room's scope (cancels room timers, removes spawned
+        // mobs) before the world is deleted, so nothing is left running.
+        if (dungeon.getGrid() != null) {
+            for (RoomNode room : dungeon.getGrid().getPath()) {
+                if (room.getScope() != null) {
+                    room.getScope().dispose();
+                }
+            }
+        }
+
         dungeon.setState(State.OFF);
         if (dungeon.getBuildTaskId() != -1) {
             Bukkit.getScheduler().cancelTask(dungeon.getBuildTaskId());

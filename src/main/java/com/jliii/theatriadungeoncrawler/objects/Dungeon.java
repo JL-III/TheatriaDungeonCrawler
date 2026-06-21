@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import java.util.UUID;
 
 /**
@@ -22,8 +23,11 @@ import java.util.UUID;
  */
 public class Dungeon {
 
+    /** Shared lives the party starts a run with. */
+    public static final int LIVES_PER_RUN = 3;
+
     private final UUID dungeonUUID = UUID.randomUUID();
-    private final WorkloadQueue workloadQueue = new WorkloadQueue();
+    private final WorkloadQueue workloadQueue;
     private final List<UUID> players = new ArrayList<>();
     private final Map<UUID, Location> returnLocations = new HashMap<>();
 
@@ -31,15 +35,33 @@ public class Dungeon {
     private final int fixedSegmentLength;
     private final DungeonTemplate.DungeonType theme;
 
+    /** Per-instance seeded RNG: isolates instances and enables shareable seeds. */
+    private final long seed = new Random().nextLong();
+    private final Random random = new Random(seed);
+
+    private final long runStartMillis = System.currentTimeMillis();
+    /** Shared life pool for the run (co-op); the run ends when it hits zero. */
+    private int livesRemaining = LIVES_PER_RUN;
+    /** Rooms entered so far — the dominant term in the run score. */
+    private int depth = 0;
+    /** Running score bonus from rewards (depth + time are computed at run end). */
+    private long scoreBonus = 0;
+
     private DungeonGrid grid;
     private State state = State.STARTING;
     private int buildTaskId = -1;
     private boolean extending = false;
 
     public Dungeon(World world, int fixedSegmentLength, DungeonTemplate.DungeonType theme) {
+        this(world, fixedSegmentLength, theme, new WorkloadQueue());
+    }
+
+    /** Lets a caller (e.g. the debug {@code /box} command) supply a shared queue. */
+    public Dungeon(World world, int fixedSegmentLength, DungeonTemplate.DungeonType theme, WorkloadQueue workloadQueue) {
         this.world = world;
         this.fixedSegmentLength = fixedSegmentLength;
         this.theme = theme;
+        this.workloadQueue = workloadQueue;
     }
 
     public void addPlayer(UUID uuid, Location returnLocation) {
@@ -90,6 +112,46 @@ public class Dungeon {
 
     public WorkloadQueue getWorkloadQueue() {
         return workloadQueue;
+    }
+
+    public Random getRandom() {
+        return random;
+    }
+
+    public long getSeed() {
+        return seed;
+    }
+
+    public long getRunStartMillis() {
+        return runStartMillis;
+    }
+
+    public int getLivesRemaining() {
+        return livesRemaining;
+    }
+
+    /** Spends one shared life. @return the lives left after spending. */
+    public int decrementLife() {
+        if (livesRemaining > 0) {
+            livesRemaining--;
+        }
+        return livesRemaining;
+    }
+
+    public int getDepth() {
+        return depth;
+    }
+
+    public void incrementDepth() {
+        depth++;
+    }
+
+    public long getScoreBonus() {
+        return scoreBonus;
+    }
+
+    public void addScoreBonus(long amount) {
+        scoreBonus += amount;
     }
 
     public DungeonGrid getGrid() {

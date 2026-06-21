@@ -1,5 +1,12 @@
 package com.jliii.theatriadungeoncrawler.factories;
 
+import com.jliii.theatriadungeoncrawler.challenge.ChallengeFactory;
+import com.jliii.theatriadungeoncrawler.challenge.ChallengeState;
+import com.jliii.theatriadungeoncrawler.challenge.ChallengeType;
+import com.jliii.theatriadungeoncrawler.challenge.RoomChallenge;
+import com.jliii.theatriadungeoncrawler.challenge.RoomContext;
+import com.jliii.theatriadungeoncrawler.challenge.RoomScope;
+import com.jliii.theatriadungeoncrawler.objects.Dungeon;
 import com.jliii.theatriadungeoncrawler.objects.DungeonGrid;
 import com.jliii.theatriadungeoncrawler.objects.RoomNode;
 import com.jliii.theatriadungeoncrawler.templates.DungeonTemplate;
@@ -11,6 +18,7 @@ import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.block.BlockFace;
+import org.bukkit.plugin.Plugin;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -85,13 +93,18 @@ public class DungeonLayoutGenerator {
 
     private static final int[][] DIRS = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
 
+    private final Plugin plugin;
+    private final Dungeon dungeon;
     private final World world;
     private final WorkloadQueue workloadQueue;
     private final DungeonBuilder workload;
+    private final ChallengeFactory challengeFactory = new ChallengeFactory();
 
-    public DungeonLayoutGenerator(World world, WorkloadQueue workloadQueue) {
-        this.world = world;
-        this.workloadQueue = workloadQueue;
+    public DungeonLayoutGenerator(Plugin plugin, Dungeon dungeon) {
+        this.plugin = plugin;
+        this.dungeon = dungeon;
+        this.world = dungeon.getWorld();
+        this.workloadQueue = dungeon.getWorkloadQueue();
         this.workload = new DungeonBuilder(workloadQueue);
     }
 
@@ -118,6 +131,7 @@ public class DungeonLayoutGenerator {
         }
         RoomNode startNode = new RoomNode(startCells, startTheme, startBox[0], startBox[1],
                 null, null, null, null, null);
+        attachChallenge(grid, startNode, ChallengeType.EMPTY);
         grid.getPath().addLast(startNode);
         grid.setSpawn(boxCenter(grid, startNode, 1));
 
@@ -272,8 +286,39 @@ public class DungeonLayoutGenerator {
         for (Coord cell : cells) {
             grid.markOccupied(cell);
         }
-        return new RoomNode(cells, theme, box[0], box[1],
+        RoomNode node = new RoomNode(cells, theme, box[0], box[1],
                 c.bridgeMin, c.bridgeMax, c.toDoorMin, c.toDoorMax, dir);
+        attachChallenge(grid, node, pickChallengeType());
+        return node;
+    }
+
+    /**
+     * Assigns a fresh challenge (and its id + resource scope) to a room and lets
+     * it build any challenge geometry. Free rooms start {@code COMPLETE} (their
+     * forward door is already open); gated rooms start {@code PENDING}.
+     */
+    private void attachChallenge(DungeonGrid grid, RoomNode node, ChallengeType type) {
+        node.setRoomId(grid.nextRoomId());
+        node.setScope(new RoomScope(plugin, world));
+        RoomChallenge challenge = challengeFactory.create(type);
+        node.setChallenge(challenge);
+        node.setState(challenge.isGated() ? ChallengeState.PENDING : ChallengeState.COMPLETE);
+        challenge.build(new RoomContext(dungeon, node));
+    }
+
+    /** Chooses the challenge for a freshly grown room. (Weighting arrives later.) */
+    private ChallengeType pickChallengeType() {
+        return ChallengeType.EMPTY;
+    }
+
+    /** Runs a room's challenge teardown and disposes its tracked entities/tasks. */
+    private void teardownRoom(RoomNode node) {
+        if (node.getChallenge() != null) {
+            node.getChallenge().teardown(new RoomContext(dungeon, node));
+        }
+        if (node.getScope() != null) {
+            node.getScope().dispose();
+        }
     }
 
     /** Clears the tail room (and its corridors), freeing its cells for reuse. */
@@ -282,6 +327,7 @@ public class DungeonLayoutGenerator {
         if (tail == null) {
             return;
         }
+        teardownRoom(tail);
         clearBox(tail.getRoomMin(), tail.getRoomMax());
         if (tail.hasCorridor()) {
             clearCorridorInterior(tail.getCorridorMin(), tail.getCorridorMax());

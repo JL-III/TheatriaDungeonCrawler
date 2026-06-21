@@ -36,6 +36,7 @@ public class DungeonGrid {
     private Location spawn;
     private Location emeraldLocation;
     private String lastExitDirection;
+    private int nextRoomId = 0;
 
     public DungeonGrid(World world, int originY, DungeonTemplate.DungeonType theme, int fixedSegmentLength) {
         this.world = world;
@@ -50,6 +51,11 @@ public class DungeonGrid {
 
     public int getOriginY() {
         return originY;
+    }
+
+    /** @return the next unique room id for this run (monotonic). */
+    public int nextRoomId() {
+        return nextRoomId++;
     }
 
     /** @return the fixed theme, or {@code null} to use a random theme per room. */
