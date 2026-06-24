@@ -1,5 +1,8 @@
 package com.jliii.theatriadungeoncrawler.managers;
 
+import com.jliii.theatriadungeoncrawler.challenge.ChallengeState;
+import com.jliii.theatriadungeoncrawler.challenge.RoomChallenge;
+import com.jliii.theatriadungeoncrawler.challenge.RoomContext;
 import com.jliii.theatriadungeoncrawler.enums.State;
 import com.jliii.theatriadungeoncrawler.factories.DungeonLayoutGenerator;
 import com.jliii.theatriadungeoncrawler.factories.WorldFactory;
@@ -7,6 +10,7 @@ import com.jliii.theatriadungeoncrawler.objects.Dungeon;
 import com.jliii.theatriadungeoncrawler.objects.DungeonGrid;
 import com.jliii.theatriadungeoncrawler.objects.RoomNode;
 import com.jliii.theatriadungeoncrawler.templates.DungeonTemplate;
+import com.jliii.theatriadungeoncrawler.util.runnables.DungeonBuilder;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
@@ -37,9 +41,17 @@ public class DungeonManager {
     /** Y level of the dungeon floor (the build origin) in every instance world. */
     private static final int ORIGIN_Y = 64;
 
+    // Run-score weights. Depth dominates so lingering can never out-earn progress:
+    // one new room (DEPTH_WEIGHT) is worth far more than the time spent reaching it.
+    private static final long DEPTH_WEIGHT = 100;
+    private static final long TIME_WEIGHT = 1;
+    private static final long TIME_UNIT_SECONDS = 10;
+
     private final Plugin plugin;
     private final Map<UUID, Dungeon> instancesById = new HashMap<>();
     private final Map<UUID, Dungeon> instanceByPlayer = new HashMap<>();
+    /** The room each player is currently standing in (for enter/leave events). */
+    private final Map<UUID, RoomNode> currentRoom = new HashMap<>();
 
     public DungeonManager(Plugin plugin) {
         this.plugin = plugin;
@@ -106,21 +118,48 @@ public class DungeonManager {
     }
 
     /**
-     * Handles a player dying inside a dungeon: the run ends, they keep what they
-     * found (via the world's keep-inventory rule), and they respawn back in the
-     * main world.
+     * Handles a player dying inside a dungeon. A death spends one of the run's
+     * shared lives. While lives remain the player respawns at the last checkpoint
+     * and the run continues; when the pool is exhausted the run ends and everyone
+     * is returned to the main world (keeping what they found, via keep-inventory).
      *
-     * @return the location the player should respawn at, or {@code null} if they
-     *         were not in a dungeon
+     * @return where the dying player should respawn, or {@code null} if they were
+     *         not in a dungeon (leave the vanilla respawn location alone)
      */
     public Location handleDeath(Player player) {
         Dungeon dungeon = instanceByPlayer.get(player.getUniqueId());
         if (dungeon == null) {
             return null;
         }
-        Location returnTo = detachPlayer(dungeon, player);
-        // Dispose next tick, after the respawn has moved the player out.
-        Bukkit.getScheduler().runTask(plugin, () -> disposeIfEmpty(dungeon));
+
+        int livesLeft = dungeon.decrementLife();
+        if (livesLeft <= 0) {
+            return endRun(dungeon, player);
+        }
+
+        // Respawn at the checkpoint and stay in the run. Re-detect their room next
+        // tick so entering the checkpoint room fires cleanly.
+        currentRoom.remove(player.getUniqueId());
+        announce(dungeon, player.getName() + " died — " + livesLeft
+                + (livesLeft == 1 ? " life" : " lives") + " remaining.");
+        DungeonGrid grid = dungeon.getGrid();
+        Location anchor = grid != null ? grid.getCheckpointSpawn() : null;
+        return anchor != null ? withFacing(anchor, player) : null;
+    }
+
+    /**
+     * Ends a run because the shared life pool is empty: announces the final
+     * score, detaches the dying player (handled by the respawn event), and
+     * disposes the instance next tick so the rest of the party is ejected too.
+     *
+     * @return the dying player's main-world respawn location
+     */
+    private Location endRun(Dungeon dungeon, Player dyingPlayer) {
+        long score = computeScore(dungeon);
+        announce(dungeon, "Out of lives! Run over — final score " + score
+                + " (depth " + dungeon.getDepth() + ").");
+        Location returnTo = detachPlayer(dungeon, dyingPlayer);
+        Bukkit.getScheduler().runTask(plugin, () -> disposeInstance(dungeon));
         return safeLocation(returnTo);
     }
 
@@ -179,6 +218,7 @@ public class DungeonManager {
     /** Removes a player from an instance, returning their stored return location. */
     private Location detachPlayer(Dungeon dungeon, Player player) {
         instanceByPlayer.remove(player.getUniqueId());
+        currentRoom.remove(player.getUniqueId());
         return dungeon.removePlayer(player.getUniqueId());
     }
 
@@ -221,6 +261,10 @@ public class DungeonManager {
                 }
             }
 
+            // Fire room enter/leave/activate, then update and complete challenges.
+            processRoomTransitions(dungeon);
+            tickActiveRooms(dungeon);
+
             if (dungeon.isExtending()) {
                 continue;
             }
@@ -257,12 +301,132 @@ public class DungeonManager {
         }
     }
 
+    // --- room challenge lifecycle -----------------------------------------
+
+    /**
+     * Detects each player crossing a room boundary and fires the corresponding
+     * challenge callbacks: leave the old room, enter the new one, and activate it
+     * the first time anyone steps into a not-yet-started gated room.
+     */
+    private void processRoomTransitions(Dungeon dungeon) {
+        DungeonGrid grid = dungeon.getGrid();
+        for (UUID playerId : dungeon.getPlayers()) {
+            Player player = Bukkit.getPlayer(playerId);
+            if (player == null) {
+                continue;
+            }
+            RoomNode now = roomAt(grid, player.getLocation());
+            RoomNode prev = currentRoom.get(playerId);
+            if (now == prev) {
+                continue;
+            }
+
+            // Left the previous room (only if it is still a live room).
+            if (prev != null && prev.getChallenge() != null && grid.getPath().contains(prev)) {
+                prev.getChallenge().onPlayerLeave(new RoomContext(dungeon, prev), player);
+            }
+
+            if (now == null) {
+                currentRoom.put(playerId, null); // in a corridor / between rooms
+                continue;
+            }
+
+            currentRoom.put(playerId, now);
+            dungeon.reachRoom(now.getRoomId());
+            RoomChallenge challenge = now.getChallenge();
+            if (challenge == null) {
+                continue;
+            }
+            RoomContext ctx = new RoomContext(dungeon, now);
+            challenge.onPlayerEnter(ctx, player);
+            if (now.getState() == ChallengeState.PENDING) {
+                now.setState(ChallengeState.ACTIVE);
+                challenge.activate(ctx);
+            }
+        }
+    }
+
+    /** Ticks every active challenge and completes any whose objective is met. */
+    private void tickActiveRooms(Dungeon dungeon) {
+        for (RoomNode room : dungeon.getGrid().getPath()) {
+            RoomChallenge challenge = room.getChallenge();
+            if (challenge == null || room.getState() != ChallengeState.ACTIVE) {
+                continue;
+            }
+            RoomContext ctx = new RoomContext(dungeon, room);
+            challenge.tick(ctx);
+            if (challenge.isComplete(ctx)) {
+                completeRoom(dungeon, room, challenge, ctx);
+            }
+        }
+    }
+
+    /** Runs a challenge's reward hook, opens its gated forward door, marks it done. */
+    private void completeRoom(Dungeon dungeon, RoomNode room, RoomChallenge challenge, RoomContext ctx) {
+        challenge.onComplete(ctx);
+        if (room.hasLockDoor()) {
+            new DungeonBuilder(dungeon.getWorkloadQueue())
+                    .fillSolidBox(room.getLockDoorMin(), room.getLockDoorMax(), Material.AIR);
+        }
+        room.setState(ChallengeState.COMPLETE);
+        announce(dungeon, "A path has opened.");
+    }
+
+    /** @return the room whose footprint contains {@code loc}, or {@code null}. */
+    private RoomNode roomAt(DungeonGrid grid, Location loc) {
+        for (RoomNode room : grid.getPath()) {
+            if (footprintContains(room, loc)) {
+                return room;
+            }
+        }
+        return null;
+    }
+
+    /** Horizontal containment only — rooms never overlap in x/z, so it is exact. */
+    private boolean footprintContains(RoomNode room, Location loc) {
+        Location min = room.getRoomMin();
+        Location max = room.getRoomMax();
+        int x = loc.getBlockX();
+        int z = loc.getBlockZ();
+        return x >= min.getBlockX() && x <= max.getBlockX()
+                && z >= min.getBlockZ() && z <= max.getBlockZ();
+    }
+
+    private Location withFacing(Location base, Player player) {
+        Location loc = base.clone();
+        loc.setYaw(player.getLocation().getYaw());
+        loc.setPitch(player.getLocation().getPitch());
+        return loc;
+    }
+
+    /** Sends a chat line to every player currently in the instance. */
+    private void announce(Dungeon dungeon, String message) {
+        for (UUID playerId : dungeon.getPlayers()) {
+            Player player = Bukkit.getPlayer(playerId);
+            if (player != null) {
+                player.sendMessage(message);
+            }
+        }
+    }
+
+    /**
+     * The run score: depth dominates, survival time is a minor secondary term,
+     * plus any reward bonuses. Weighted so idling can never out-earn progress.
+     */
+    private long computeScore(Dungeon dungeon) {
+        long seconds = (System.currentTimeMillis() - dungeon.getRunStartMillis()) / 1000L;
+        return dungeon.getDepth() * DEPTH_WEIGHT
+                + (seconds / TIME_UNIT_SECONDS) * TIME_WEIGHT
+                + dungeon.getScoreBonus();
+    }
+
     /** Returns any remaining players to safety, then deletes the world. */
     private void disposeInstance(Dungeon dungeon) {
         for (UUID playerId : dungeon.getPlayers()) {
             Player player = Bukkit.getPlayer(playerId);
             Location returnTo = dungeon.getReturnLocation(playerId);
             instanceByPlayer.remove(playerId);
+            currentRoom.remove(playerId);
             if (player != null) {
                 sendToSafety(player, returnTo);
             }

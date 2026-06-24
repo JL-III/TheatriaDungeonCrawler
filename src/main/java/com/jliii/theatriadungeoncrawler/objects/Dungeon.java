@@ -42,8 +42,8 @@ public class Dungeon {
     private final long runStartMillis = System.currentTimeMillis();
     /** Shared life pool for the run (co-op); the run ends when it hits zero. */
     private int livesRemaining = LIVES_PER_RUN;
-    /** Rooms entered so far — the dominant term in the run score. */
-    private int depth = 0;
+    /** Highest room id any player has entered — the basis of run "depth". */
+    private int maxRoomIdReached = -1;
     /** Running score bonus from rewards (depth + time are computed at run end). */
     private long scoreBonus = 0;
 
@@ -138,12 +138,16 @@ public class Dungeon {
         return livesRemaining;
     }
 
+    /** @return how far the run reached: the count of rooms entered (deepest + 1). */
     public int getDepth() {
-        return depth;
+        return maxRoomIdReached + 1;
     }
 
-    public void incrementDepth() {
-        depth++;
+    /** Records that a player entered the room with the given id (monotonic depth). */
+    public void reachRoom(int roomId) {
+        if (roomId > maxRoomIdReached) {
+            maxRoomIdReached = roomId;
+        }
     }
 
     public long getScoreBonus() {

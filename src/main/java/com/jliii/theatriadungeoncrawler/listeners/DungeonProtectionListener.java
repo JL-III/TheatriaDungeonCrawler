@@ -12,8 +12,10 @@ import org.bukkit.event.player.PlayerRespawnEvent;
 
 /**
  * Protects players while they are inside a dungeon: they cannot break or place
- * the dungeon's blocks, they keep their items and experience on death, and a
- * death ends the run by respawning them out in the main world.
+ * the dungeon's blocks, and they keep their items and experience on death. A
+ * death spends one of the run's shared lives and respawns the player at the last
+ * checkpoint; when the pool is empty the run ends and they respawn in the main
+ * world (see {@link DungeonManager#handleDeath}).
  */
 public class DungeonProtectionListener implements Listener {
 

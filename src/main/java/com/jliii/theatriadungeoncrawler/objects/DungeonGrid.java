@@ -34,6 +34,7 @@ public class DungeonGrid {
     private final Deque<RoomNode> path = new ArrayDeque<>();
 
     private Location spawn;
+    private Location checkpointSpawn;
     private Location emeraldLocation;
     private String lastExitDirection;
     private int nextRoomId = 0;
@@ -94,6 +95,21 @@ public class DungeonGrid {
 
     public void setSpawn(Location spawn) {
         this.spawn = spawn;
+    }
+
+    /**
+     * @return where a player respawns after dying: the centre of the last
+     *         checkpoint room reached (the snake head). Falls back to the spawn.
+     */
+    public Location getCheckpointSpawn() {
+        if (checkpointSpawn != null) {
+            return checkpointSpawn.clone();
+        }
+        return getSpawn();
+    }
+
+    public void setCheckpointSpawn(Location checkpointSpawn) {
+        this.checkpointSpawn = checkpointSpawn;
     }
 
     public Location getEmeraldLocation() {

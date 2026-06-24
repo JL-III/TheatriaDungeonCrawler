@@ -134,6 +134,8 @@ public class DungeonLayoutGenerator {
         attachChallenge(grid, startNode, ChallengeType.EMPTY);
         grid.getPath().addLast(startNode);
         grid.setSpawn(boxCenter(grid, startNode, 1));
+        // Until the first checkpoint is reached, a death respawns at the start room.
+        grid.setCheckpointSpawn(boxCenter(grid, startNode, 1));
 
         RoomNode checkpoint = growSegment(grid, startNode, segmentLength(grid, random), random);
         placeEmerald(grid, checkpoint);
@@ -174,6 +176,10 @@ public class DungeonLayoutGenerator {
         }
         placeEmerald(grid, nextCheckpoint);
 
+        // The checkpoint the player reached is now the respawn anchor; it becomes
+        // the head of the snake once the rooms behind it are removed.
+        grid.setCheckpointSpawn(boxCenter(grid, checkpoint, 1));
+
         // Remove every room behind the checkpoint the player just stepped on.
         while (grid.getPath().peekFirst() != checkpoint) {
             removeTail(grid);
@@ -199,10 +205,29 @@ public class DungeonLayoutGenerator {
             if (cur == start) {
                 grid.setLastExitDirection(cardinal(node.getEntryDir()));
             }
+            lockIfGated(cur, node);
             grid.getPath().addLast(node);
             cur = node;
         }
         return cur;
+    }
+
+    /**
+     * If {@code predecessor} is an unsolved gated room, seals the doorway into
+     * {@code next} (the predecessor's forward door) and records it as the
+     * predecessor's lock. The manager carves it open when the gate is solved.
+     *
+     * <p>With every room free today this never seals, so behaviour is unchanged;
+     * the mechanism is in place for gated challenges.</p>
+     */
+    private void lockIfGated(RoomNode predecessor, RoomNode next) {
+        RoomChallenge challenge = predecessor.getChallenge();
+        if (challenge != null && challenge.isGated()
+                && predecessor.getState() != ChallengeState.COMPLETE
+                && next.hasDoor()) {
+            closeFill(next.getDoorMin(), next.getDoorMax(), CORRIDOR_MATERIAL);
+            predecessor.setLockDoor(next.getDoorMin(), next.getDoorMax());
+        }
     }
 
     private int segmentLength(DungeonGrid grid, Random random) {
