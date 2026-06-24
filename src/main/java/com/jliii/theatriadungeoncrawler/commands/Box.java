@@ -177,6 +177,9 @@ public class Box implements CommandExecutor {
 
         Dungeon debugDungeon = new Dungeon(world, roomCount, theme, workloadQueue);
         DungeonLayoutGenerator generator = new DungeonLayoutGenerator(plugin, debugDungeon);
+        // The debug walkthrough is not ticked by the manager, so it could never
+        // open a gated room's sealed door — keep every room free here.
+        generator.setGatedRoomsEnabled(false);
         Location spawn = generator.generateInitial(origin, roomCount, theme, debugDungeon.getRandom()).getSpawn();
 
         // Drop an immediate safe platform under the spawn so the player doesn't

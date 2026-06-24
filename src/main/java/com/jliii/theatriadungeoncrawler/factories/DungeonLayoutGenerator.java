@@ -99,6 +99,9 @@ public class DungeonLayoutGenerator {
     private final WorkloadQueue workloadQueue;
     private final DungeonBuilder workload;
     private final ChallengeFactory challengeFactory = new ChallengeFactory();
+    /** When false, every room is free — used by the /box debug walkthrough, which
+     *  is not ticked by the manager and so could never open a sealed gated door. */
+    private boolean gatedRoomsEnabled = true;
 
     public DungeonLayoutGenerator(Plugin plugin, Dungeon dungeon) {
         this.plugin = plugin;
@@ -106,6 +109,11 @@ public class DungeonLayoutGenerator {
         this.world = dungeon.getWorld();
         this.workloadQueue = dungeon.getWorkloadQueue();
         this.workload = new DungeonBuilder(workloadQueue);
+    }
+
+    /** Disables gated rooms (all rooms free). For un-ticked debug generation. */
+    public void setGatedRoomsEnabled(boolean gatedRoomsEnabled) {
+        this.gatedRoomsEnabled = gatedRoomsEnabled;
     }
 
     /**
@@ -341,7 +349,7 @@ public class DungeonLayoutGenerator {
 
     /** Chooses the challenge for a freshly grown room: ~1 in 4 gated when allowed. */
     private ChallengeType pickChallengeType(Random random, boolean allowGated) {
-        if (allowGated && random.nextInt(4) == 0) {
+        if (gatedRoomsEnabled && allowGated && random.nextInt(4) == 0) {
             return ChallengeType.REACH_GOAL;
         }
         return ChallengeType.EMPTY;
