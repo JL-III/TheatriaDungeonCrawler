@@ -32,6 +32,11 @@ public class RoomNode {
     private final Location doorMin;
     private final Location doorMax;
 
+    /** The full incoming passage (the carved tunnel through the bridge), set after
+     *  construction. Used to seal/open the whole connector for a gated room. */
+    private Location tunnelMin;
+    private Location tunnelMax;
+
     /** Direction the corridor entered this room from ({@code null} for spawn). */
     private final int[] entryDir;
 
@@ -109,6 +114,23 @@ public class RoomNode {
 
     public boolean hasDoor() {
         return doorMin != null && doorMax != null;
+    }
+
+    public void setTunnel(Location tunnelMin, Location tunnelMax) {
+        this.tunnelMin = tunnelMin;
+        this.tunnelMax = tunnelMax;
+    }
+
+    public Location getTunnelMin() {
+        return tunnelMin;
+    }
+
+    public Location getTunnelMax() {
+        return tunnelMax;
+    }
+
+    public boolean hasTunnel() {
+        return tunnelMin != null && tunnelMax != null;
     }
 
     public int[] getEntryDir() {

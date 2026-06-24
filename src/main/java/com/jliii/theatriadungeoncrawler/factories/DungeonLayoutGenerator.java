@@ -99,9 +99,6 @@ public class DungeonLayoutGenerator {
     private final WorkloadQueue workloadQueue;
     private final DungeonBuilder workload;
     private final ChallengeFactory challengeFactory = new ChallengeFactory();
-    /** When false, every room is free — used by the /box debug walkthrough, which
-     *  is not ticked by the manager and so could never open a sealed gated door. */
-    private boolean gatedRoomsEnabled = true;
 
     public DungeonLayoutGenerator(Plugin plugin, Dungeon dungeon) {
         this.plugin = plugin;
@@ -109,11 +106,6 @@ public class DungeonLayoutGenerator {
         this.world = dungeon.getWorld();
         this.workloadQueue = dungeon.getWorkloadQueue();
         this.workload = new DungeonBuilder(workloadQueue);
-    }
-
-    /** Disables gated rooms (all rooms free). For un-ticked debug generation. */
-    public void setGatedRoomsEnabled(boolean gatedRoomsEnabled) {
-        this.gatedRoomsEnabled = gatedRoomsEnabled;
     }
 
     /**
@@ -231,17 +223,18 @@ public class DungeonLayoutGenerator {
     }
 
     /**
-     * If {@code predecessor} is an unsolved gated room, seals the doorway into
-     * {@code next} (the predecessor's forward door) and records it as the
-     * predecessor's lock. The manager carves it open when the gate is solved.
+     * If {@code predecessor} is an unsolved gated room, fills the entire passage
+     * into {@code next} (the predecessor's forward connector) so it reads as a
+     * solid wall, and records it as the predecessor's lock. The manager carves
+     * the whole passage back open when the gate is solved.
      */
     private void lockIfGated(RoomNode predecessor, RoomNode next) {
         RoomChallenge challenge = predecessor.getChallenge();
         if (challenge != null && challenge.isGated()
                 && predecessor.getState() != ChallengeState.COMPLETE
-                && next.hasDoor()) {
-            closeFill(next.getDoorMin(), next.getDoorMax(), CORRIDOR_MATERIAL);
-            predecessor.setLockDoor(next.getDoorMin(), next.getDoorMax());
+                && next.hasTunnel()) {
+            closeFill(next.getTunnelMin(), next.getTunnelMax(), CORRIDOR_MATERIAL);
+            predecessor.setLockDoor(next.getTunnelMin(), next.getTunnelMax());
         }
     }
 
@@ -329,6 +322,7 @@ public class DungeonLayoutGenerator {
         }
         RoomNode node = new RoomNode(cells, theme, box[0], box[1],
                 c.bridgeMin, c.bridgeMax, c.toDoorMin, c.toDoorMax, dir);
+        node.setTunnel(c.tunnelMin, c.tunnelMax);
         attachChallenge(grid, node, type);
         return node;
     }
@@ -349,7 +343,7 @@ public class DungeonLayoutGenerator {
 
     /** Chooses the challenge for a freshly grown room: ~1 in 4 gated when allowed. */
     private ChallengeType pickChallengeType(Random random, boolean allowGated) {
-        if (gatedRoomsEnabled && allowGated && random.nextInt(4) == 0) {
+        if (allowGated && random.nextInt(4) == 0) {
             return ChallengeType.REACH_GOAL;
         }
         return ChallengeType.EMPTY;

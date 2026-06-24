@@ -1,9 +1,6 @@
 package com.jliii.theatriadungeoncrawler.commands;
 
 import com.jliii.theatriadungeoncrawler.TheatriaDungeonCrawler;
-import com.jliii.theatriadungeoncrawler.factories.DungeonLayoutGenerator;
-import com.jliii.theatriadungeoncrawler.factories.WorldFactory;
-import com.jliii.theatriadungeoncrawler.objects.Dungeon;
 import com.jliii.theatriadungeoncrawler.objects.Room;
 import com.jliii.theatriadungeoncrawler.util.runnables.DungeonBuilder;
 import com.jliii.theatriadungeoncrawler.util.runnables.WorkloadQueue;
@@ -47,11 +44,6 @@ public class Box implements CommandExecutor {
 
         if (args[0].equalsIgnoreCase("corridor")) {
             createCorridor(player);
-            return true;
-        }
-
-        if (args[0].equalsIgnoreCase("dungeon")) {
-            generateDungeon(player, args);
             return true;
         }
 
@@ -132,73 +124,6 @@ public class Box implements CommandExecutor {
 
 
         return true;
-    }
-
-    /**
-     * Generates a procedural dungeon in the void "Labyrinth" world and teleports
-     * the player into its start room. Usage: /box dungeon &lt;rooms&gt; [theme]
-     * (theme defaults to a fresh random theme per room).
-     */
-    private void generateDungeon(Player player, String[] args) {
-        if (args.length < 2) {
-            player.sendMessage("Usage: /box dungeon <rooms> [theme]");
-            return;
-        }
-
-        int roomCount;
-        try {
-            roomCount = Integer.parseInt(args[1]);
-        } catch (NumberFormatException e) {
-            player.sendMessage("Room count must be a number.");
-            return;
-        }
-        if (roomCount < 1) {
-            player.sendMessage("Room count must be at least 1.");
-            return;
-        }
-
-        DungeonTemplate.DungeonType theme = null; // null => random theme per room
-        if (args.length >= 3 && !args[2].equalsIgnoreCase("random")) {
-            try {
-                theme = DungeonTemplate.DungeonType.valueOf(args[2].toUpperCase());
-            } catch (IllegalArgumentException e) {
-                player.sendMessage("Invalid theme. Make sure it is a valid theme type.");
-                return;
-            }
-        }
-
-        World world = WorldFactory.getOrCreateDungeonWorld();
-        if (world == null) {
-            player.sendMessage("Failed to create the dungeon world.");
-            return;
-        }
-
-        Location origin = new Location(world, 0, 64, 0);
-
-        Dungeon debugDungeon = new Dungeon(world, roomCount, theme, workloadQueue);
-        DungeonLayoutGenerator generator = new DungeonLayoutGenerator(plugin, debugDungeon);
-        // The debug walkthrough is not ticked by the manager, so it could never
-        // open a gated room's sealed door — keep every room free here.
-        generator.setGatedRoomsEnabled(false);
-        Location spawn = generator.generateInitial(origin, roomCount, theme, debugDungeon.getRandom()).getSpawn();
-
-        // Drop an immediate safe platform under the spawn so the player doesn't
-        // fall into the void before the asynchronous build reaches the floor.
-        for (int dx = -1; dx <= 1; dx++) {
-            for (int dz = -1; dz <= 1; dz++) {
-                world.getBlockAt(spawn.getBlockX() + dx, spawn.getBlockY() - 1, spawn.getBlockZ() + dz)
-                        .setType(Material.STONE);
-            }
-        }
-
-        // Build the queued blocks automatically (rather than waiting for /box play).
-        workloadQueue.setManualExecution(false);
-
-        spawn.setYaw(player.getLocation().getYaw());
-        spawn.setPitch(player.getLocation().getPitch());
-        player.teleport(spawn);
-        player.sendMessage("Generating a " + roomCount + "-room dungeon in '"
-                + WorldFactory.DUNGEON_WORLD_NAME + "'. Watch it build around you.");
     }
 
     private void createCorridor(Player player) {
