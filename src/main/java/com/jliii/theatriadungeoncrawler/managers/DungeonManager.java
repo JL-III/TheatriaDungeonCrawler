@@ -131,6 +131,11 @@ public class DungeonManager {
         if (dungeon == null) {
             return null;
         }
+        // The run already ended this tick (e.g. a second player died at 0 lives);
+        // just eject this player without re-running the end-of-run handling.
+        if (dungeon.getState() != State.ACTIVE) {
+            return safeLocation(detachPlayer(dungeon, player));
+        }
 
         int livesLeft = dungeon.decrementLife();
         if (livesLeft <= 0) {
@@ -155,6 +160,9 @@ public class DungeonManager {
      * @return the dying player's main-world respawn location
      */
     private Location endRun(Dungeon dungeon, Player dyingPlayer) {
+        // Mark the run ended immediately so a same-tick second death (or the next
+        // tickInstances pass) cannot re-enter end-of-run handling or advance it.
+        dungeon.setState(State.OFF);
         long score = computeScore(dungeon);
         announce(dungeon, "Out of lives! Run over — final score " + score
                 + " (depth " + dungeon.getDepth() + ").");
@@ -261,13 +269,13 @@ public class DungeonManager {
                 }
             }
 
-            // Fire room enter/leave/activate, then update and complete challenges.
-            processRoomTransitions(dungeon);
-            tickActiveRooms(dungeon);
-
             if (dungeon.isExtending()) {
                 continue;
             }
+
+            // Fire room enter/leave/activate, then update and complete challenges.
+            processRoomTransitions(dungeon);
+            tickActiveRooms(dungeon);
             for (UUID playerId : dungeon.getPlayers()) {
                 Player player = Bukkit.getPlayer(playerId);
                 if (player != null && dungeon.getGrid().isOnEmerald(player.getLocation())) {
@@ -431,10 +439,14 @@ public class DungeonManager {
                 sendToSafety(player, returnTo);
             }
         }
-        // Dispose every room's scope (cancels room timers, removes spawned
-        // mobs) before the world is deleted, so nothing is left running.
+        // Tear down every room (challenge cleanup + scope disposal) before the
+        // world is deleted, so nothing is left running. Mirrors removeTail's
+        // teardown so both disposal paths run identical cleanup.
         if (dungeon.getGrid() != null) {
             for (RoomNode room : dungeon.getGrid().getPath()) {
+                if (room.getChallenge() != null) {
+                    room.getChallenge().teardown(new RoomContext(dungeon, room));
+                }
                 if (room.getScope() != null) {
                     room.getScope().dispose();
                 }

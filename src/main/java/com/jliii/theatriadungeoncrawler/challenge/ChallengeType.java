@@ -10,5 +10,7 @@ package com.jliii.theatriadungeoncrawler.challenge;
  */
 public enum ChallengeType {
     /** A free room with no objective: the forward door is open from the start. */
-    EMPTY
+    EMPTY,
+    /** Gated: the forward door is sealed until a player reaches the gold block. */
+    REACH_GOAL
 }

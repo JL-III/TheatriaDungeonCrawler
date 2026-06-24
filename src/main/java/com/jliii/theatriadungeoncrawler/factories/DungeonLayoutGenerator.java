@@ -198,17 +198,27 @@ public class DungeonLayoutGenerator {
     private RoomNode growSegment(DungeonGrid grid, RoomNode start, int rooms, Random random) {
         RoomNode cur = start;
         for (int i = 0; i < rooms; i++) {
-            RoomNode node = tryExtend(grid, cur, random);
+            // The last room is the checkpoint and is never gated; never gate two
+            // rooms in a row either, so the player always gets a breather.
+            boolean last = (i == rooms - 1);
+            boolean allowGated = !last && !isGated(cur);
+            ChallengeType type = pickChallengeType(random, allowGated);
+
+            RoomNode node = tryExtend(grid, cur, random, type);
             if (node == null) {
                 break;
             }
             if (cur == start) {
+                // Growth root (spawn, or the checkpoint when advancing): never seal
+                // its forward door — that would soft-lock the segment.
                 grid.setLastExitDirection(cardinal(node.getEntryDir()));
+            } else {
+                lockIfGated(cur, node);
             }
-            lockIfGated(cur, node);
             grid.getPath().addLast(node);
             cur = node;
         }
+        ensureFreeCheckpoint(cur, start);
         return cur;
     }
 
@@ -216,9 +226,6 @@ public class DungeonLayoutGenerator {
      * If {@code predecessor} is an unsolved gated room, seals the doorway into
      * {@code next} (the predecessor's forward door) and records it as the
      * predecessor's lock. The manager carves it open when the gate is solved.
-     *
-     * <p>With every room free today this never seals, so behaviour is unchanged;
-     * the mechanism is in place for gated challenges.</p>
      */
     private void lockIfGated(RoomNode predecessor, RoomNode next) {
         RoomChallenge challenge = predecessor.getChallenge();
@@ -253,7 +260,7 @@ public class DungeonLayoutGenerator {
      *
      * @return the new room, or {@code null} if {@code cur} is fully boxed in
      */
-    private RoomNode tryExtend(DungeonGrid grid, RoomNode cur, Random random) {
+    private RoomNode tryExtend(DungeonGrid grid, RoomNode cur, Random random, ChallengeType type) {
         List<int[]> dirs = new ArrayList<>();
         Collections.addAll(dirs, DIRS);
         Collections.shuffle(dirs, random);
@@ -274,7 +281,7 @@ public class DungeonLayoutGenerator {
                 List<Coord> cells = expandFootprint(grid, entry, dir, random);
                 int reach = floodReach(grid, entry);
                 if (reach >= SAFETY_CELLS) {
-                    return buildRoom(grid, b, dir, cells, themeFor(grid.getTheme(), random));
+                    return buildRoom(grid, b, dir, cells, themeFor(grid.getTheme(), random), type);
                 }
                 if (reach > bestReach) {
                     bestReach = reach;
@@ -287,7 +294,7 @@ public class DungeonLayoutGenerator {
         if (bestCells == null) {
             return null; // fully boxed in
         }
-        return buildRoom(grid, bestBoundary, bestDir, bestCells, themeFor(grid.getTheme(), random));
+        return buildRoom(grid, bestBoundary, bestDir, bestCells, themeFor(grid.getTheme(), random), type);
     }
 
     /**
@@ -297,7 +304,8 @@ public class DungeonLayoutGenerator {
      * continuous tunnel straight through it (queued last so nothing re-seals it).
      * Marks the new cells occupied and returns the node.
      */
-    private RoomNode buildRoom(DungeonGrid grid, Coord b, int[] dir, List<Coord> cells, DungeonTemplate.DungeonType theme) {
+    private RoomNode buildRoom(DungeonGrid grid, Coord b, int[] dir, List<Coord> cells,
+                               DungeonTemplate.DungeonType theme, ChallengeType type) {
         Connection c = connection(grid, b, dir[0], dir[1]);
         Coord entry = c.to;
         Location[] box = boxFromCells(grid, cells);
@@ -313,7 +321,7 @@ public class DungeonLayoutGenerator {
         }
         RoomNode node = new RoomNode(cells, theme, box[0], box[1],
                 c.bridgeMin, c.bridgeMax, c.toDoorMin, c.toDoorMax, dir);
-        attachChallenge(grid, node, pickChallengeType());
+        attachChallenge(grid, node, type);
         return node;
     }
 
@@ -331,9 +339,30 @@ public class DungeonLayoutGenerator {
         challenge.build(new RoomContext(dungeon, node));
     }
 
-    /** Chooses the challenge for a freshly grown room. (Weighting arrives later.) */
-    private ChallengeType pickChallengeType() {
+    /** Chooses the challenge for a freshly grown room: ~1 in 4 gated when allowed. */
+    private ChallengeType pickChallengeType(Random random, boolean allowGated) {
+        if (allowGated && random.nextInt(4) == 0) {
+            return ChallengeType.REACH_GOAL;
+        }
         return ChallengeType.EMPTY;
+    }
+
+    private boolean isGated(RoomNode node) {
+        return node.getChallenge() != null && node.getChallenge().isGated();
+    }
+
+    /**
+     * Safety net for the early-break case: if growth dead-ended and left a gated
+     * room as the checkpoint, demote it to a free room (reverting its challenge
+     * blocks) so its forward door is never sealed when the next segment is built.
+     */
+    private void ensureFreeCheckpoint(RoomNode checkpoint, RoomNode start) {
+        if (checkpoint != start && isGated(checkpoint)) {
+            checkpoint.getChallenge().teardown(new RoomContext(dungeon, checkpoint));
+            checkpoint.setChallenge(challengeFactory.create(ChallengeType.EMPTY));
+            checkpoint.setState(ChallengeState.COMPLETE);
+            checkpoint.setLockDoor(null, null);
+        }
     }
 
     /** Runs a room's challenge teardown and disposes its tracked entities/tasks. */

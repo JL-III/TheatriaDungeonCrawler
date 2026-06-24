@@ -8,6 +8,8 @@ public final class ChallengeFactory {
 
     public RoomChallenge create(ChallengeType type) {
         switch (type) {
+            case REACH_GOAL:
+                return new GoalChallenge();
             case EMPTY:
             default:
                 return new EmptyChallenge();
